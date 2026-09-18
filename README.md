@@ -33,18 +33,117 @@ Both images come from the bundled [`example/`](example/) site.
 Written in TypeScript, ships with type declarations, zero runtime
 dependencies (Playwright is a peer).
 
+> **Not on npm yet.** The `flowshot` name on the npm registry belongs to an
+> unrelated package — do not `npm install flowshot`. Install from GitHub or
+> as a git submodule; either way the package is named `flowshot` inside
+> `node_modules`, so `import { defineScenario } from "flowshot"` works.
+
+### Requirements
+
+- Node ≥ 20 to run; Node ≥ 22.18 (or 23.6+) to write config and scenarios
+  in TypeScript, which Node then runs directly by stripping types
+- Playwright ≥ 1.40 in your project (`npm i -D playwright`)
+- A running instance of the app you want to capture; flowshot does not
+  start it
+
+### Option A — from GitHub
+
 ```bash
-npm install --save-dev flowshot playwright
+npm install --save-dev github:Keyhole-Koro/flowshot playwright
 npx playwright install chromium
 ```
 
-`playwright` is a peer dependency; flowshot uses whatever version your
-project has. Config and scenario files are `.ts` on Node ≥ 22.18 / 23.6
-(which run TypeScript directly by stripping types) and `.mjs` on older Node;
-`npx flowshot init` picks the right one. In a project whose `package.json`
-has no `"type": "module"`, use `.mts` instead of `.ts` so Node treats the
-files as ES modules without a warning. `defineConfig` and `defineScenario`
-give you completion and checking either way.
+npm runs the package's `prepare` script on install, which compiles
+`src/` to `dist/`. Pin a commit with `github:Keyhole-Koro/flowshot#<sha>`.
+
+### Option B — git submodule (when you want to hack on flowshot too)
+
+```bash
+git submodule add git@github.com:Keyhole-Koro/flowshot.git tools/flowshot
+npm install --save-dev file:tools/flowshot playwright
+npx playwright install chromium
+```
+
+`node_modules/flowshot` becomes a symlink to `tools/flowshot`, and
+`npm install` builds `dist/` there. After pulling flowshot changes run
+`npm --prefix tools/flowshot run build`. Fresh clones need
+`git submodule update --init tools/flowshot` before `npm install`. Builds
+that skip the submodule (Docker images that only copy `package*.json`)
+still pass `npm ci`; the link just dangles.
+
+## Set up a project
+
+1. **Scaffold.** From the project root:
+
+   ```bash
+   npx flowshot init
+   ```
+
+   This writes `flowshot.config.ts` and `flowshot/scenarios/public.ts`
+   (`.mjs` on Node < 22.18; `--force` to overwrite) and copies the Claude Code
+   skills into `.claude/skills/`. In a project whose `package.json` has no
+   `"type": "module"`, rename the two files to `.mts` so Node treats them as
+   ES modules without a warning; flowshot discovers `flowshot.config.mts` too.
+
+2. **Point it at your app.** Edit the config: `baseUrl`, the viewports you
+   care about, `warmUp` routes if your dev server compiles on demand (Vite),
+   and a `beforeShoot` hook if pages render data client-side after load:
+
+   ```ts
+   beforeShoot: async (page) => {
+     await page.waitForFunction(() => document.body.innerText.trim().length > 80).catch(() => {});
+   },
+   ```
+
+3. **Write scenarios** under `flowshot/scenarios/` — one file per user path
+   (see [Quick start](#quick-start) and [Scenario API](#scenario-api)).
+   Seed state in `setup()` (write to your DB or call your API), inject a
+   session cookie with `newPage({ cookies })`, mock hard-to-reach states with
+   `page.route()`. Keep project helpers in `flowshot/lib/`.
+
+4. **Capture.** Start the app, then:
+
+   ```bash
+   npx flowshot run           # everything
+   npx flowshot lint          # every flow node captured, nothing orphaned
+   ```
+
+   Open `output/captures/index.html`. Add `output/captures/` to
+   `.gitignore`.
+
+5. **Wire it in.** Suggested `package.json` scripts:
+
+   ```json
+   "capture": "flowshot run",
+   "capture:viewer": "flowshot viewer",
+   "capture:lint": "flowshot lint"
+   ```
+
+   For TypeScript projects, include the files in your `tsconfig.json` so
+   `tsc --noEmit` checks them: `"include": ["flowshot/**/*.mts", "flowshot.config.mts"]`
+   plus `"allowImportingTsExtensions": true` if scenarios import each other
+   with `.mts` extensions.
+
+6. **CI (optional).** Capture on every PR and publish the viewer as an
+   artifact:
+
+   ```yaml
+   - run: npx playwright install --with-deps chromium
+   - run: npm run dev &            # or however the app starts
+   - run: npx wait-on http://localhost:3000
+   - run: npx flowshot run --json > flowshot-summary.json
+   - uses: actions/upload-artifact@v4
+     with: { name: captures, path: output/captures }
+   ```
+
+   `run` exits 1 when a scenario fails; `lint` exits 1 when a flow node has
+   no capture.
+
+7. **Let the agent use it.** The skills copied in step 1 teach Claude Code
+   to re-capture, diff and read only the screens it touched — see
+   [Working with an LLM agent](#working-with-an-llm-agent). Put
+   project-specific facts (how to launch the app, seed helpers, test ids) in
+   your own skill or README and point at them.
 
 ## Quick start
 
