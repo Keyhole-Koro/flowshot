@@ -22,7 +22,10 @@
     "bin",
     "dist",
     "skills",
-    "example",
+    "example/site",
+    "example/scenarios",
+    "example/serve.ts",
+    "example/flowshot.config.ts",
     "README.md",
     "LICENSE"
   ],
