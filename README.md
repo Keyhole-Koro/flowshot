@@ -39,29 +39,32 @@ npx playwright install chromium
 ```
 
 `playwright` is a peer dependency; flowshot uses whatever version your
-project has. Config and scenario files can be `.mjs` (any Node ≥ 20) or `.ts`
-(Node ≥ 22.18 / 23.6, which strip types natively); `defineConfig` and
-`defineScenario` give you completion and checking either way.
+project has. Config and scenario files are `.ts` on Node ≥ 22.18 / 23.6
+(which run TypeScript directly by stripping types) and `.mjs` on older Node;
+`npx flowshot init` picks the right one. `defineConfig` and `defineScenario`
+give you completion and checking either way.
 
 ## Quick start
 
-`flowshot.config.mjs` in your project root:
+`flowshot.config.ts` in your project root:
 
-```js
-export default {
+```ts
+import { defineConfig } from "flowshot";
+
+export default defineConfig({
   baseUrl: "http://localhost:3000",
   outDir: "output/captures",
-  scenarios: ["captures/scenarios/*.mjs"],
+  scenarios: ["captures/scenarios/*.ts"],
   viewports: [
     { name: "pc", width: 1440, height: 1000 },
     { name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true },
   ],
-};
+});
 ```
 
-`captures/scenarios/public.mjs`:
+`captures/scenarios/public.ts`:
 
-```js
+```ts
 import { defineScenario } from "flowshot";
 
 export default defineScenario({
@@ -90,7 +93,7 @@ export default defineScenario({
 
 Or let flowshot generate the flow from a list of steps:
 
-```js
+```ts
 export default defineScenario({
   id: "public",
   title: "Public pages",
@@ -169,7 +172,7 @@ without `image` is a transition target (e.g. “redirect back”); give it a
 | --- | --- | --- |
 | `baseUrl` | `http://localhost:3000` | env `BASE_URL` overrides |
 | `outDir` | `output/captures` | env `OUT_DIR` overrides; relative to the config file |
-| `scenarios` | `["flowshot/scenarios/*.mjs"]` | globs (`*`, `**`) or file paths |
+| `scenarios` | `flowshot/scenarios/*.{mjs,ts}` | globs (`*`, `**`) or file paths |
 | `viewports` | pc 1440×1000, mobile 390×844 | `{ name, width, height, isMobile?, hasTouch? }` |
 | `settleMs` | `600` | quiet time before each screenshot |
 | `beforeShoot` | `null` | `async (page, { viewport, scenario, path })` hook, e.g. wait for client-side data |
@@ -246,10 +249,12 @@ npm test            # builds, then node --test: end-to-end against example/ plus
 npm run example     # serve example/ on :4173; then npm run example:capture
 ```
 
-Layout: `src/` (Node, ESM, `NodeNext`), `src/viewer/client.ts` (browser script
-inlined into `index.html`, compiled by `tsconfig.client.json`), `skills/`
-(Claude Code skills copied by `flowshot init`), `example/`, `test/`, `docs/`
-(README images, regenerated from the example).
+Everything is TypeScript. `src/` is compiled to `dist/` (Node, ESM,
+`NodeNext`); `src/viewer/client.ts` is compiled separately into the browser
+script inlined in `index.html`; `example/` and `test/` run uncompiled on
+Node's type stripping (so developing flowshot needs Node ≥ 22.18, using it
+does not). `skills/` holds the Claude Code skills copied by `flowshot init`,
+`docs/` the README images regenerated from the example.
 
 ## Roadmap
 

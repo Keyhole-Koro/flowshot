@@ -17,7 +17,7 @@ const DEFAULTS = {
   baseUrl: "http://localhost:3000",
   outDir: "output/captures",
   viewports: DEFAULT_VIEWPORTS,
-  scenarios: ["flowshot/scenarios/*.mjs"],
+  scenarios: ["flowshot/scenarios/*.mjs", "flowshot/scenarios/*.ts"],
   // Milliseconds to wait after the page settles before taking a screenshot,
   // so CSS transitions and web fonts finish.
   settleMs: 600,
@@ -32,7 +32,7 @@ const DEFAULTS = {
   viewer: { title: "flowshot", subtitle: "Screen capture viewer", lang: "en" },
 } satisfies UserConfig;
 
-const CONFIG_CANDIDATES = ["flowshot.config.mjs", "flowshot.config.js", "flowshot.config.ts"];
+const CONFIG_CANDIDATES = ["flowshot.config.ts", "flowshot.config.mjs", "flowshot.config.js"];
 
 async function exists(file: string): Promise<boolean> {
   try {

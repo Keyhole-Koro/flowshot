@@ -67,7 +67,7 @@ The screenshot happened before client-side data rendered.
 - Use the config's `beforeShoot` hook (e.g. wait until `document.body
   .innerText.length > N`, or until a test id appears) or a step `waitFor`.
 - Dev servers that compile routes on demand paint blank on first visit:
-  list the route in `warmUp` in `flowshot.config.mjs`.
+  list the route in `warmUp` in `flowshot.config.ts (or .mjs)`.
 
 ### "Cannot find package 'playwright'" / browser launch fails
 

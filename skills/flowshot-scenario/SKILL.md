@@ -5,7 +5,7 @@ description: Add or change a flowshot scenario so a new screen, state, or user p
 
 # Add or change a flowshot scenario
 
-A scenario is one file under the `scenarios` glob in `flowshot.config.mjs`
+A scenario is one file under the `scenarios` glob in `flowshot.config.ts (or .mjs)`
 (`npx flowshot list` prints each scenario's file). It prepares state once,
 captures once per viewport, and declares the flows (transition diagrams) the
 viewer shows. **Capture and flow are edited together**: a screenshot nobody
@@ -17,7 +17,7 @@ can find in a flow, or a flow node with no screenshot, both fail
 **Linear or tree-shaped path on one page → `steps`.** flowshot generates the
 `capture()` and the flow (nodes, edges, layout) from the list:
 
-```js
+```ts
 import { defineScenario } from "flowshot";
 
 export default defineScenario({
@@ -54,7 +54,7 @@ export default defineScenario({
 
 **Several actors, contexts, or seeded users → `capture(ctx)` + `flows`.**
 
-```js
+```ts
 export default defineScenario({
   id: "sharing",
   title: "Sharing",
@@ -87,6 +87,9 @@ Contexts are closed for you.
   case. Keep the same path when a screen is only restyled so diffs stay
   meaningful; use a new number for a genuinely new screen.
 - Scenario id: `[a-z0-9-]`; `order` (number) controls run and viewer order.
+- Files are `.ts` when the project runs Node ≥ 22.18 (types are stripped at
+  run time, so use `import type` for types and no `enum`/parameter
+  properties); otherwise `.mjs`. Match what the project already uses.
 - Prefer seeding state (DB, API) over clicking through long paths; prefer
   `page.route()` mocks for error states that are hard to provoke.
 - Selectors: `getByTestId` / `getByRole` / `getByLabel`. Check the `data-testid`

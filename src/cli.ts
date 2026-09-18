@@ -30,7 +30,7 @@ Usage:
   flowshot help
 
 Options:
-  -c, --config <file>   Config file (default: flowshot.config.mjs in cwd)
+  -c, --config <file>   Config file (default: flowshot.config.{ts,mjs,js} in cwd)
       --json            Machine-readable output
       --quiet           Suppress progress output
 
@@ -296,11 +296,17 @@ async function commandInspect(config: Config, values: Values, positionals: strin
   for (const piece of pieces) console.log(`  ${path.relative(process.cwd(), piece.file)}  (y=${piece.y}, ${piece.width}x${piece.height})`);
 }
 
-const STARTER_CONFIG = `// flowshot configuration. See https://github.com/Keyhole-Koro/flowshot#config
-export default {
+/** Node >= 22.18 / 23.6 runs .ts files directly (type stripping). */
+function supportsTypeStripping(): boolean {
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  return major > 23 || (major === 23 && minor >= 6) || (major === 22 && minor >= 18);
+}
+
+const STARTER_CONFIG = (ts: boolean) => `// flowshot configuration. See https://github.com/Keyhole-Koro/flowshot#config
+${ts ? 'import { defineConfig } from "flowshot";\n\nexport default defineConfig({' : "export default {"}
   baseUrl: "http://localhost:3000",
   outDir: "output/captures",
-  scenarios: ["flowshot/scenarios/*.mjs"],
+  scenarios: ["flowshot/scenarios/*.${ts ? "ts" : "mjs"}"],
   viewports: [
     { name: "pc", width: 1440, height: 1000, isMobile: false, hasTouch: false },
     { name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true },
@@ -310,7 +316,7 @@ export default {
   // Wait for client-side rendering before each screenshot, e.g.:
   // beforeShoot: async (page) => { await page.waitForFunction(() => document.body.innerText.length > 80).catch(() => {}); },
   viewer: { title: "My app", subtitle: "Screen capture viewer", lang: "en" },
-};
+${ts ? "});" : "};"}
 `;
 
 const STARTER_SCENARIO = `import { defineScenario } from "flowshot";
@@ -330,10 +336,12 @@ async function commandInit(config: Config, values: Values, log: Logger): Promise
   const created: string[] = [];
 
   if (!config.configFile) {
-    const configFile = path.join(cwd, "flowshot.config.mjs");
-    await writeFile(configFile, STARTER_CONFIG, "utf8");
+    const ts = supportsTypeStripping();
+    const ext = ts ? "ts" : "mjs";
+    const configFile = path.join(cwd, `flowshot.config.${ext}`);
+    await writeFile(configFile, STARTER_CONFIG(ts), "utf8");
     created.push(configFile);
-    const scenarioFile = path.join(cwd, "flowshot/scenarios/public.mjs");
+    const scenarioFile = path.join(cwd, `flowshot/scenarios/public.${ext}`);
     await mkdir(path.dirname(scenarioFile), { recursive: true });
     await writeFile(scenarioFile, STARTER_SCENARIO, "utf8");
     created.push(scenarioFile);

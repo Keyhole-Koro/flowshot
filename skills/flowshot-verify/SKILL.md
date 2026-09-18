@@ -6,7 +6,7 @@ description: Verify a UI change at real viewport widths with flowshot — re-cap
 # Verify a UI change with flowshot
 
 flowshot captures screens per scenario × viewport into `output/captures/`
-(or the `outDir` in `flowshot.config.mjs`) and indexes them in
+(or the `outDir` in `flowshot.config.ts (or .mjs)`) and indexes them in
 `manifest.json`. You cannot open the HTML viewer; use the CLI and read PNGs.
 
 Every command below is `npx flowshot …` run from the project root. The app
