@@ -30,7 +30,7 @@ Usage:
   flowshot help
 
 Options:
-  -c, --config <file>   Config file (default: flowshot.config.{ts,mjs,js} in cwd)
+  -c, --config <file>   Config file (default: flowshot.config.{ts,mts,mjs,js} in cwd)
       --json            Machine-readable output
       --quiet           Suppress progress output
 

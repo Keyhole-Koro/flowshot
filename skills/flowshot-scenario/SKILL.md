@@ -87,9 +87,10 @@ Contexts are closed for you.
   case. Keep the same path when a screen is only restyled so diffs stay
   meaningful; use a new number for a genuinely new screen.
 - Scenario id: `[a-z0-9-]`; `order` (number) controls run and viewer order.
-- Files are `.ts` when the project runs Node ≥ 22.18 (types are stripped at
-  run time, so use `import type` for types and no `enum`/parameter
-  properties); otherwise `.mjs`. Match what the project already uses.
+- Files are `.ts` (or `.mts` when the project's `package.json` has no
+  `"type": "module"`) when the project runs Node ≥ 22.18 — types are stripped
+  at run time, so use `import type` for types and no `enum`/parameter
+  properties; otherwise `.mjs`. Match what the project already uses.
 - Prefer seeding state (DB, API) over clicking through long paths; prefer
   `page.route()` mocks for error states that are hard to provoke.
 - Selectors: `getByTestId` / `getByRole` / `getByLabel`. Check the `data-testid`

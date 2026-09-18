@@ -41,7 +41,9 @@ npx playwright install chromium
 `playwright` is a peer dependency; flowshot uses whatever version your
 project has. Config and scenario files are `.ts` on Node ≥ 22.18 / 23.6
 (which run TypeScript directly by stripping types) and `.mjs` on older Node;
-`npx flowshot init` picks the right one. `defineConfig` and `defineScenario`
+`npx flowshot init` picks the right one. In a project whose `package.json`
+has no `"type": "module"`, use `.mts` instead of `.ts` so Node treats the
+files as ES modules without a warning. `defineConfig` and `defineScenario`
 give you completion and checking either way.
 
 ## Quick start
@@ -172,7 +174,7 @@ without `image` is a transition target (e.g. “redirect back”); give it a
 | --- | --- | --- |
 | `baseUrl` | `http://localhost:3000` | env `BASE_URL` overrides |
 | `outDir` | `output/captures` | env `OUT_DIR` overrides; relative to the config file |
-| `scenarios` | `flowshot/scenarios/*.{mjs,ts}` | globs (`*`, `**`) or file paths |
+| `scenarios` | `flowshot/scenarios/*.{mjs,ts,mts}` | globs (`*`, `**`) or file paths |
 | `viewports` | pc 1440×1000, mobile 390×844 | `{ name, width, height, isMobile?, hasTouch? }` |
 | `settleMs` | `600` | quiet time before each screenshot |
 | `beforeShoot` | `null` | `async (page, { viewport, scenario, path })` hook, e.g. wait for client-side data |
