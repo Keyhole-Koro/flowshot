@@ -1,0 +1,44 @@
+name: Publish
+
+# Publishes @keyhole-koro/flowshot to npm when a version tag is pushed
+# (`git tag v0.1.0 && git push origin v0.1.0`), or manually from the Actions tab.
+#
+# Auth, in order of preference:
+#   1. npm trusted publishing (OIDC): configure this repo + workflow as a trusted
+#      publisher on the package's npm settings page; no secret needed.
+#   2. NPM_TOKEN repository secret: a granular access token with
+#      "Bypass two-factor authentication" and write access to the package.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC for npm provenance / trusted publishing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@latest && npm --version
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Check that the tag matches package.json
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "v$version" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != package.json v$version"; exit 1; }
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -343,6 +343,15 @@ The CLI is designed to be driven by an agent verifying its own UI changes:
 They are generic; keep project specifics (how to launch the app, seed
 helpers, test ids) in your own skill or README and point at these.
 
+## Releasing
+
+`npm version <patch|minor|major>` bumps `package.json` and creates a `vX.Y.Z`
+tag; `git push --follow-tags` triggers [`publish.yml`](.github/workflows/publish.yml),
+which runs the tests and publishes with provenance. Auth is either npm
+trusted publishing (configure this repository and workflow on the package's
+npm settings) or an `NPM_TOKEN` repository secret (granular token with
+2FA bypass).
+
 ## Development
 
 ```bash
