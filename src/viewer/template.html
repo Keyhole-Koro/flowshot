@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}} — {{subtitle}}</title>
+  <style>
+/*{{css}}*/
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <h1 class="brand">{{title}}</h1>
+      <p class="sub">{{subtitle}}</p>
+      <nav class="flow-list" aria-label="{{labels.flows}}"></nav>
+      <p class="generated-at">{{generatedAt}}</p>
+    </aside>
+    <main class="content">
+      <div class="heading">
+        <div>
+          <h1 id="flow-title"></h1>
+          <p class="description" id="flow-description"></p>
+        </div>
+        <div class="viewport-toggle" aria-label="{{labels.viewportsLabel}}">{{viewportButtons}}</div>
+      </div>
+      <section class="diagram-wrap" aria-label="{{labels.diagram}}">
+        <div class="diagram" id="diagram"></div>
+      </section>
+      <section class="detail">
+        <div class="preview" id="preview"></div>
+        <aside class="metadata">
+          <h2 id="node-title"></h2>
+          <p id="node-condition"></p>
+          <code id="image-path"></code>
+          <dl id="capture-meta"></dl>
+          <a class="open-original" id="open-original" target="_blank" rel="noreferrer">{{labels.openOriginal}}</a>
+        </aside>
+      </section>
+      <h2 class="gallery-title">{{labels.sameFlow}}</h2>
+      <div class="gallery" id="gallery"></div>
+    </main>
+  </div>
+  <script>
+/*{{data}}*/
+/*{{js}}*/
+  </script>
+</body>
+</html>

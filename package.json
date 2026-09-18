@@ -1,0 +1,38 @@
+{
+  "name": "flowshot",
+  "version": "0.1.0",
+  "description": "Scenario-driven screenshot capture and flow viewer for web apps, designed for LLM-assisted UI verification.",
+  "license": "MIT",
+  "author": "Keyhole-Koro",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keyhole-Koro/flowshot.git"
+  },
+  "type": "module",
+  "bin": {
+    "flowshot": "./bin/flowshot.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40"
+  },
+  "keywords": [
+    "playwright",
+    "screenshot",
+    "visual-testing",
+    "flow",
+    "llm"
+  ]
+}
