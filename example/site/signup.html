@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign up</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top"><strong>Example</strong><nav><a href="/">Home</a><a href="/pricing.html">Pricing</a><a href="/signup.html">Sign up</a></nav></header>
+  <main>
+    <h1>Create your account</h1>
+    <form id="signup" data-testid="signup-form">
+      <label>Email <input type="email" name="email" required></label>
+      <label>Password <input type="password" name="password" required minlength="8"></label>
+      <button class="button" type="submit" data-testid="signup-submit">Sign up</button>
+      <p class="error" data-testid="signup-error" hidden>That email is already registered.</p>
+    </form>
+    <section class="done" data-testid="signup-done" hidden><h2>Check your inbox</h2><p>We sent a confirmation link.</p></section>
+  </main>
+  <script>
+    document.getElementById("signup").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const email = new FormData(event.target).get("email");
+      if (email === "taken@example.com") {
+        document.querySelector("[data-testid=signup-error]").hidden = false;
+        return;
+      }
+      event.target.hidden = true;
+      document.querySelector("[data-testid=signup-done]").hidden = false;
+    });
+  </script>
+</body>
+</html>

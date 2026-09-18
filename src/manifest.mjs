@@ -33,13 +33,14 @@ export async function readManifest(outDir) {
 }
 
 /**
- * Write the manifest. Captures from scenarios that were *not* part of this
- * run are carried over from the previous manifest, so `run --only x` keeps
- * the rest of the index intact.
+ * Write the manifest. Captures outside this run's scenario × viewport
+ * selection are carried over from the previous manifest, so `run --only x
+ * --viewport mobile` keeps the rest of the index intact.
  */
-export async function writeManifest(outDir, { config, captures, ranScenarios, failures }) {
+export async function writeManifest(outDir, { config, captures, ranScenarios, ranViewports = null, failures }) {
   const previous = await readManifest(outDir);
-  const kept = (previous?.captures ?? []).filter((entry) => !ranScenarios.includes(entry.scenario));
+  const ran = (entry) => ranScenarios.includes(entry.scenario) && (!ranViewports || ranViewports.includes(entry.viewport));
+  const kept = (previous?.captures ?? []).filter((entry) => !ran(entry));
   const merged = [...kept, ...captures].sort((a, b) => a.path.localeCompare(b.path));
 
   const manifest = {

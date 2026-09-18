@@ -69,6 +69,21 @@ export default defineScenario({
 });
 ```
 
+Or let flowshot generate the flow from a list of steps:
+
+```js
+export default defineScenario({
+  id: "public",
+  title: "Public pages",
+  steps: [
+    { id: "home", title: "Home", condition: "Landing", goto: "/", image: "public/01_home.png" },
+    { id: "pricing", title: "Pricing", via: "Pricing",
+      act: async (page) => { await page.getByRole("link", { name: "Pricing" }).click(); await page.waitForURL(/pricing/); },
+      image: "public/02_pricing.png" },
+  ],
+});
+```
+
 Then, with your app running:
 
 ```bash
@@ -76,10 +91,16 @@ npx flowshot run            # captures every scenario × viewport, writes manife
 npx flowshot run --only public --viewport mobile
 npx flowshot list --json    # scenarios, viewports and captures as JSON
 npx flowshot lint           # flow nodes without captures, captures without flows, last-run failures
+npx flowshot diff           # what changed since the previous run (pixel diff + highlight images)
+npx flowshot inspect public/01_home --viewport mobile --tile 1200   # split a tall capture for reading
 npx flowshot viewer         # rebuild index.html from manifest.json only
+npx flowshot init           # starter config + copy the bundled agent skills into .claude/skills/
 ```
 
-Open `output/captures/index.html` in a browser.
+Open `output/captures/index.html` in a browser. `npx flowshot help` lists every option.
+
+A runnable example lives in [`example/`](example/): `npm run example` serves
+a static site on :4173, `npm run example:capture` captures it.
 
 ## Scenario API
 
@@ -87,13 +108,26 @@ Open `output/captures/index.html` in a browser.
 defineScenario({
   id,               // [a-z0-9-], unique; used by --only and the manifest
   title, description,
+  order,            // sort key for run and viewer order (default 0, then file path)
   viewports,        // optional subset of config viewport names
   async setup({ config, baseUrl, log }) {},        // once per scenario → state
-  async capture(ctx) {},                           // once per viewport
+  async capture(ctx) {},                           // once per viewport (or use `steps`)
   async teardown({ config, baseUrl, state, log }) {},
   flows: [ { id, title, description, viewports?, diagramHeight?, nodes, edges } ],
+
+  // Declarative alternative to capture(): one shared page, one node per step.
+  page,             // options for that page, or ({ state }) => options (e.g. cookies)
+  async prepare(page, ctx) {},                     // route mocks etc. before the first step
+  steps: [ { id, title, condition, goto, act, waitFor, image, from, via, viewports, note, x, y } ],
+  flow,             // overrides for the generated flow (title, description, diagramHeight, viewports)
 });
 ```
+
+Steps run in order on the shared page: `goto` (path or `(state) => path`),
+then `act(page, ctx)`, then `waitFor` (a test id, or `(page, ctx) => …`), then
+`shoot(image)` if `image` is set. Edges default to “previous step → this
+step”; `from` (`"id"`, `["a", "b"]`, or `null`) and `via` (label) override.
+Positions come from a layered layout unless a step sets `x`/`y` (%).
 
 `capture(ctx)` receives:
 
@@ -134,30 +168,68 @@ output/captures/
   index.html             # the viewer
   pc/<dir>/<name>.png
   mobile/<dir>/<name>.png
+  .previous/             # the versions overwritten by the last run (for `diff`)
+  .diff/                 # highlight images written by `diff`
+  .inspect/              # crops and tiles written by `inspect`
 ```
 
-`run --only <id>` replaces only that scenario's entries in the manifest, so
-partial re-captures keep the index whole. Failures do not abort the run by
-default (`--fail-fast` to change); they are listed at the end, in the
-manifest, and the exit code is 1.
+`run --only <id> [--viewport v]` replaces only the matching entries in the
+manifest, so partial re-captures keep the index whole. Failures do not abort
+the run by default (`--fail-fast` to change); they are listed at the end, in
+the manifest, and the exit code is 1.
+
+### diff
+
+`flowshot diff [--against <dir>] [--only <id,...>] [--viewport <v,...>] [--threshold 0.0005] [--json]`
+
+Compares each capture with `.previous/` (or any directory with the same
+layout, e.g. captures from another branch). A pixel counts as changed when
+any channel differs by more than 16; a capture counts as changed above the
+threshold ratio or when its size changed. For each changed capture you get
+the ratio, the bounding region of the change, and a highlight image under
+`.diff/` (red over a faded copy of the current capture). No dependencies: the
+PNG codec is built in.
+
+### inspect
+
+`flowshot inspect <capture> [--viewport <v>] [--crop x,y,w,h | --tile <height>] [--json]`
+
+Writes crops or overlapping tiles of a capture under `.inspect/` so an agent
+that reads images can look at a 390×8000 page piece by piece. `<capture>` is
+an id (`app/billing/01_overview`), a viewport path, or a `.diff/…` path.
 
 ## Working with an LLM agent
 
 The CLI is designed to be driven by an agent verifying its own UI changes:
 
-1. `flowshot list --json` → find the capture id for the screen you touched.
-2. `flowshot run --only <scenario> --viewport mobile` → re-capture just that.
-3. Read the PNG (crop tall pages), or diff against the previous capture.
+1. `flowshot list --json` → find the capture for the screen you touched.
+2. `flowshot run --only <scenario> --viewport mobile --no-viewer` → re-capture just that.
+3. `flowshot diff --only <scenario>` → changed regions; `flowshot inspect … --crop` to read them.
 4. `flowshot lint --json` → nothing missing, nothing orphaned.
 
-Skills for Claude Code that package this loop live in `skills/` (coming).
+`npx flowshot init` copies three Claude Code skills into `.claude/skills/`:
+
+| skill | when it triggers |
+| --- | --- |
+| `flowshot-verify` | after a UI change: re-capture, diff, read, report |
+| `flowshot-scenario` | a screen or path was added: write/extend a scenario and its flow |
+| `flowshot-triage` | a run failed or a capture shows the wrong screen |
+
+They are generic; keep project specifics (how to launch the app, seed
+helpers, test ids) in your own skill or README and point at these.
+
+## Development
+
+```bash
+npm ci && npx playwright install chromium
+npm test            # node --test: end-to-end against example/ plus unit checks
+```
 
 ## Roadmap
 
-- `flowshot diff` — pixel diff against a previous run or a git ref
-- `flowshot inspect` — crop / tile tall captures for image-reading agents
-- Auto layout for flows declared from capture steps
-- Bundled Claude Code skills: verify, scenario, triage
+- `diff --against git:<ref>` — compare with captures committed or stashed on another ref
+- Ignore regions / masks for known-dynamic areas
+- Per-flow HTML export for sharing a single diagram
 
 ## License
 

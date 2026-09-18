@@ -19,6 +19,7 @@
     "bin",
     "src",
     "skills",
+    "example",
     "README.md",
     "LICENSE"
   ],
@@ -34,5 +35,13 @@
     "visual-testing",
     "flow",
     "llm"
-  ]
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "example": "node example/serve.mjs 4173",
+    "example:capture": "cd example && node ../bin/flowshot.mjs run"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.2"
+  }
 }

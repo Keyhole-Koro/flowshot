@@ -1,10 +1,11 @@
 // Runs scenarios: one browser, one `setup` per scenario, one `capture` per
 // viewport, and a manifest at the end.
 
-import { mkdir } from "node:fs/promises";
+import { access, copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 import { captureId, pngSize, writeManifest } from "./manifest.mjs";
+import { PREVIOUS_DIR } from "./diff.mjs";
 
 const noopLog = { info() {}, warn() {}, error() {} };
 
@@ -43,7 +44,20 @@ function contextOptions(viewport, extra = {}) {
  * Build the helper object handed to `capture()` for one scenario × viewport.
  * It tracks contexts and last navigated URLs so failures can be explained.
  */
-function createCaptureContext({ browser, config, scenario, viewport, state, log, captures }) {
+async function keepPrevious(config, file, backedUp) {
+  if (backedUp.has(file)) return;
+  backedUp.add(file);
+  try {
+    await access(file);
+  } catch {
+    return;
+  }
+  const previous = path.join(config.outDir, PREVIOUS_DIR, path.relative(config.outDir, file));
+  await mkdir(path.dirname(previous), { recursive: true });
+  await copyFile(file, previous);
+}
+
+function createCaptureContext({ browser, config, scenario, viewport, state, log, captures, backedUp }) {
   const contexts = new Set();
   let lastUrl = null;
 
@@ -97,6 +111,8 @@ function createCaptureContext({ browser, config, scenario, viewport, state, log,
       const relative = relativePath.replace(/^\/+/, "");
       const file = path.join(config.outDir, viewport.name, relative);
       await mkdir(path.dirname(file), { recursive: true });
+      // Keep the version we are about to overwrite so `flowshot diff` can compare.
+      await keepPrevious(config, file, backedUp);
       if (config.beforeShoot) await config.beforeShoot(page, { viewport, scenario: scenario.id, path: relative });
       if (shouldSettle) await settle(page, config.settleMs);
       await page.screenshot({ path: file, fullPage, ...options });
@@ -165,6 +181,7 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
   await mkdir(config.outDir, { recursive: true });
   const captures = [];
   const failures = [];
+  const backedUp = new Set();
   const browser = await chromium.launch(config.launch);
 
   try {
@@ -193,7 +210,7 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
 
       for (const viewport of scenarioViewports) {
         log.info(`-- ${viewport.name} (${viewport.width}x${viewport.height})`);
-        const ctx = createCaptureContext({ browser, config, scenario, viewport, state, log, captures });
+        const ctx = createCaptureContext({ browser, config, scenario, viewport, state, log, captures, backedUp });
         try {
           await scenario.capture(ctx);
         } catch (cause) {
@@ -218,6 +235,7 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
     config,
     captures,
     ranScenarios: selected.map((scenario) => scenario.id),
+    ranViewports: viewportFilter,
     failures,
   });
   return { manifest, captures, failures };

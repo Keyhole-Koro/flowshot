@@ -8,6 +8,7 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { captureFromSteps, flowFromSteps, validateSteps } from "./steps.mjs";
 
 const SCENARIO_ID = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -21,7 +22,11 @@ const SCENARIO_ID = /^[a-z0-9][a-z0-9-]*$/;
  * @param {string} [scenario.description]
  * @param {string[]} [scenario.viewports] Names of config viewports to capture; default all.
  * @param {(ctx: object) => Promise<unknown>} [scenario.setup] Runs once before any viewport.
- * @param {(ctx: object) => Promise<void>} scenario.capture Runs once per viewport.
+ * @param {(ctx: object) => Promise<void>} [scenario.capture] Runs once per viewport. Required unless `steps` is given.
+ * @param {object[]} [scenario.steps] Declarative alternative to `capture` (see steps.mjs); also generates a flow.
+ * @param {object|((ctx) => object)} [scenario.page] Options for the page that `steps` share (e.g. `{ cookies }`).
+ * @param {(page, ctx) => Promise<void>} [scenario.prepare] Runs on the shared page before the first step (route mocks etc.).
+ * @param {object} [scenario.flow] Overrides for the flow generated from `steps` (title, description, diagramHeight, viewports).
  * @param {(ctx: object) => Promise<void>} [scenario.teardown]
  * @param {object[]} [scenario.flows] Viewer flows (see viewer/build.mjs).
  * @param {number} [scenario.order] Sort key for run and viewer order (default 0, then file path).
@@ -29,8 +34,15 @@ const SCENARIO_ID = /^[a-z0-9][a-z0-9-]*$/;
 export function defineScenario(scenario) {
   if (!scenario || typeof scenario !== "object") throw new TypeError("defineScenario expects an object");
   if (!SCENARIO_ID.test(scenario.id ?? "")) throw new TypeError(`Scenario id must match ${SCENARIO_ID}: ${JSON.stringify(scenario.id)}`);
-  if (typeof scenario.capture !== "function") throw new TypeError(`Scenario "${scenario.id}" needs a capture() function`);
-  for (const flow of scenario.flows ?? []) {
+  const normalized = { title: scenario.id, description: "", flows: [], ...scenario, __flowshot: true };
+  if (scenario.steps) {
+    validateSteps(scenario.id, scenario.steps);
+    if (!scenario.capture) normalized.capture = captureFromSteps(normalized);
+    const generated = flowFromSteps(normalized);
+    if (!normalized.flows.some((flow) => flow.id === generated.id)) normalized.flows = [generated, ...normalized.flows];
+  }
+  if (typeof normalized.capture !== "function") throw new TypeError(`Scenario "${scenario.id}" needs a capture() function or steps`);
+  for (const flow of normalized.flows) {
     if (!flow.id) throw new TypeError(`Scenario "${scenario.id}": every flow needs an id`);
     if (!Array.isArray(flow.nodes) || flow.nodes.length === 0) throw new TypeError(`Flow "${flow.id}" needs at least one node`);
     const ids = new Set(flow.nodes.map((node) => node.id));
@@ -38,7 +50,7 @@ export function defineScenario(scenario) {
       if (!ids.has(from) || !ids.has(to)) throw new TypeError(`Flow "${flow.id}": edge ${from} -> ${to} references an unknown node`);
     }
   }
-  return { title: scenario.id, description: "", flows: [], ...scenario, __flowshot: true };
+  return normalized;
 }
 
 // Minimal glob: supports `*` (within a segment) and `**` (any depth).
