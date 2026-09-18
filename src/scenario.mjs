@@ -24,6 +24,7 @@ const SCENARIO_ID = /^[a-z0-9][a-z0-9-]*$/;
  * @param {(ctx: object) => Promise<void>} scenario.capture Runs once per viewport.
  * @param {(ctx: object) => Promise<void>} [scenario.teardown]
  * @param {object[]} [scenario.flows] Viewer flows (see viewer/build.mjs).
+ * @param {number} [scenario.order] Sort key for run and viewer order (default 0, then file path).
  */
 export function defineScenario(scenario) {
   if (!scenario || typeof scenario !== "object") throw new TypeError("defineScenario expects an object");
@@ -106,5 +107,5 @@ export async function loadScenarios(config) {
     scenarios.push({ ...scenario, file });
   }
   if (scenarios.length === 0) throw new Error(`No scenarios matched ${JSON.stringify(patterns)} under ${config.rootDir}`);
-  return scenarios;
+  return scenarios.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.file.localeCompare(b.file));
 }
