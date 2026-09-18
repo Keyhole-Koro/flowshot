@@ -3,17 +3,23 @@
 
 import { access, copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "playwright";
-import { captureId, pngSize, writeManifest } from "./manifest.mjs";
-import { PREVIOUS_DIR } from "./diff.mjs";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { PREVIOUS_DIR } from "./diff.js";
+import { captureId, pngSize, writeManifest } from "./manifest.js";
+import type { CaptureContext, CaptureEntry, Config, Logger, Manifest, NewContextOptions, Scenario, ShootOptions, Viewport } from "./types.js";
 
-const noopLog = { info() {}, warn() {}, error() {} };
+const noopLog: Logger = { info() {}, warn() {}, error() {} };
 
 export class ScenarioError extends Error {
-  constructor(scenario, viewport, cause, url) {
+  scenario: string;
+  viewport: string | null;
+  url: string | null;
+  override cause: unknown;
+
+  constructor(scenario: string, viewport: string | null, cause: unknown, url: string | null) {
     const where = viewport ? `${scenario} (${viewport})` : scenario;
     const at = url ? ` at ${url}` : "";
-    super(`Scenario ${where} failed${at}: ${cause?.message ?? cause}`);
+    super(`Scenario ${where} failed${at}: ${cause instanceof Error ? cause.message : String(cause)}`);
     this.name = "ScenarioError";
     this.scenario = scenario;
     this.viewport = viewport;
@@ -26,12 +32,13 @@ export class ScenarioError extends Error {
  * Wait for the page to be visually stable: fonts loaded and `settleMs` of
  * quiet so transitions finish. `networkidle` is the caller's job (goto).
  */
-export async function settle(page, settleMs) {
-  await page.evaluate(() => document.fonts?.ready).catch(() => {});
+export async function settle(page: Page, settleMs: number): Promise<void> {
+  // String form: this module is compiled without the DOM lib.
+  await page.evaluate("document.fonts ? document.fonts.ready : null").catch(() => {});
   if (settleMs > 0) await page.waitForTimeout(settleMs);
 }
 
-function contextOptions(viewport, extra = {}) {
+function contextOptions(viewport: Viewport, extra: Omit<NewContextOptions, "cookies"> = {}) {
   return {
     viewport: { width: viewport.width, height: viewport.height },
     isMobile: Boolean(viewport.isMobile),
@@ -40,11 +47,7 @@ function contextOptions(viewport, extra = {}) {
   };
 }
 
-/**
- * Build the helper object handed to `capture()` for one scenario × viewport.
- * It tracks contexts and last navigated URLs so failures can be explained.
- */
-async function keepPrevious(config, file, backedUp) {
+async function keepPrevious(config: Config, file: string, backedUp: Set<string>): Promise<void> {
   if (backedUp.has(file)) return;
   backedUp.add(file);
   try {
@@ -57,19 +60,38 @@ async function keepPrevious(config, file, backedUp) {
   await copyFile(file, previous);
 }
 
-function createCaptureContext({ browser, config, scenario, viewport, state, log, captures, backedUp }) {
-  const contexts = new Set();
-  let lastUrl = null;
+interface ContextInput<State> {
+  browser: Browser;
+  config: Config;
+  scenario: Scenario<State>;
+  viewport: Viewport;
+  state: State;
+  log: Logger;
+  captures: CaptureEntry[];
+  backedUp: Set<string>;
+}
 
-  const track = (context) => {
+type TrackedContext<State> = CaptureContext<State> & { closeAll(): Promise<void> };
+
+/**
+ * Build the helper object handed to `capture()` for one scenario × viewport.
+ * It tracks contexts and last navigated URLs so failures can be explained.
+ */
+function createCaptureContext<State>({ browser, config, scenario, viewport, state, log, captures, backedUp }: ContextInput<State>): TrackedContext<State> {
+  const contexts = new Set<BrowserContext>();
+  let lastUrl: string | null = null;
+
+  const track = (context: BrowserContext) => {
     contexts.add(context);
-    context.on("page", (page) => page.on("framenavigated", (frame) => {
-      if (frame === page.mainFrame()) lastUrl = frame.url();
-    }));
+    context.on("page", (page) =>
+      page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) lastUrl = frame.url();
+      }),
+    );
     return context;
   };
 
-  const ctx = {
+  const ctx: TrackedContext<State> = {
     browser,
     config,
     baseUrl: config.baseUrl,
@@ -80,10 +102,6 @@ function createCaptureContext({ browser, config, scenario, viewport, state, log,
 
     url: (pathname) => (/^https?:\/\//.test(pathname) ? pathname : `${config.baseUrl}${pathname}`),
 
-    /**
-     * New browser context sized for this viewport. `cookies` is a shorthand
-     * for `addCookies` scoped to `baseUrl`.
-     */
     async newContext({ cookies, ...options } = {}) {
       const context = track(await browser.newContext(contextOptions(viewport, options)));
       if (cookies?.length) {
@@ -92,22 +110,16 @@ function createCaptureContext({ browser, config, scenario, viewport, state, log,
       return context;
     },
 
-    /** New context + page in one call. */
     async newPage(options) {
       const context = await ctx.newContext(options);
       return context.newPage();
     },
 
-    /** `page.goto` relative to `baseUrl`, waiting for network idle by default. */
     async goto(page, pathname, options = {}) {
       return page.goto(ctx.url(pathname), { waitUntil: "networkidle", ...options });
     },
 
-    /**
-     * Screenshot to `<outDir>/<viewport>/<relativePath>` and record it in the
-     * manifest. Full page by default.
-     */
-    async shoot(page, relativePath, { fullPage = true, settle: shouldSettle = true, ...options } = {}) {
+    async shoot(page, relativePath, { fullPage = true, settle: shouldSettle = true, ...options }: ShootOptions = {}) {
       const relative = relativePath.replace(/^\/+/, "");
       const file = path.join(config.outDir, viewport.name, relative);
       await mkdir(path.dirname(file), { recursive: true });
@@ -143,7 +155,7 @@ function createCaptureContext({ browser, config, scenario, viewport, state, log,
   return ctx;
 }
 
-async function warmUp(browser, config, log) {
+async function warmUp(browser: Browser, config: Config, log: Logger): Promise<void> {
   if (!config.warmUp?.length) return;
   log.info(`warming up ${config.warmUp.length} route(s)...`);
   const context = await browser.newContext();
@@ -154,19 +166,24 @@ async function warmUp(browser, config, log) {
   await context.close();
 }
 
-/**
- * Run scenarios and write the manifest.
- *
- * @param {object[]} scenarios Loaded scenarios (see scenario.mjs).
- * @param {object} config Loaded config (see config.mjs).
- * @param {object} [options]
- * @param {string[]} [options.only] Scenario ids to run; default all.
- * @param {string[]} [options.viewports] Viewport names to run; default all.
- * @param {boolean} [options.keepGoing=true] Continue after a scenario fails.
- * @param {object} [options.log] `{ info, warn, error }`.
- * @returns {Promise<{ manifest: object, captures: object[], failures: ScenarioError[] }>}
- */
-export async function runScenarios(scenarios, config, { only, viewports, keepGoing = true, log = noopLog } = {}) {
+export interface RunOptions {
+  /** Scenario ids to run; default all. */
+  only?: string[];
+  /** Viewport names to run; default all. */
+  viewports?: string[];
+  /** Continue after a scenario fails (default true). */
+  keepGoing?: boolean;
+  log?: Logger;
+}
+
+export interface RunResult {
+  manifest: Manifest;
+  captures: CaptureEntry[];
+  failures: ScenarioError[];
+}
+
+/** Run scenarios and write the manifest. */
+export async function runScenarios(scenarios: Scenario[], config: Config, { only, viewports, keepGoing = true, log = noopLog }: RunOptions = {}): Promise<RunResult> {
   const selected = only?.length ? scenarios.filter((scenario) => only.includes(scenario.id)) : scenarios;
   if (only?.length) {
     const missing = only.filter((id) => !scenarios.some((scenario) => scenario.id === id));
@@ -179,9 +196,9 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
   }
 
   await mkdir(config.outDir, { recursive: true });
-  const captures = [];
-  const failures = [];
-  const backedUp = new Set();
+  const captures: CaptureEntry[] = [];
+  const failures: ScenarioError[] = [];
+  const backedUp = new Set<string>();
   const browser = await chromium.launch(config.launch);
 
   try {
@@ -197,7 +214,7 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
         continue;
       }
 
-      let state;
+      let state: unknown;
       try {
         state = scenario.setup ? await scenario.setup({ config, baseUrl: config.baseUrl, log }) : undefined;
       } catch (cause) {
@@ -224,7 +241,7 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
       }
 
       if (scenario.teardown) {
-        await scenario.teardown({ config, baseUrl: config.baseUrl, state, log }).catch((cause) => log.warn(`  teardown failed: ${cause.message}`));
+        await scenario.teardown({ config, baseUrl: config.baseUrl, state, log }).catch((cause: unknown) => log.warn(`  teardown failed: ${cause instanceof Error ? cause.message : String(cause)}`));
       }
     }
   } finally {
@@ -236,7 +253,7 @@ export async function runScenarios(scenarios, config, { only, viewports, keepGoi
     captures,
     ranScenarios: selected.map((scenario) => scenario.id),
     ranViewports: viewportFilter,
-    failures,
+    failures: failures.map(({ scenario, viewport, message, url }) => ({ scenario, viewport, message, url })),
   });
   return { manifest, captures, failures };
 }

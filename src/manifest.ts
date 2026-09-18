@@ -6,12 +6,13 @@
 
 import { mkdir, open, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { CaptureEntry, Config, Manifest, ManifestFailure } from "./types.js";
 
 export const MANIFEST_FILE = "manifest.json";
 const MANIFEST_VERSION = 1;
 
 /** Read the PNG header for dimensions without decoding the image. */
-export async function pngSize(file) {
+export async function pngSize(file: string): Promise<{ width: number; height: number } | null> {
   const handle = await open(file, "r");
   try {
     const header = Buffer.alloc(24);
@@ -23,13 +24,22 @@ export async function pngSize(file) {
   }
 }
 
-export async function readManifest(outDir) {
+export async function readManifest(outDir: string): Promise<Manifest | null> {
   try {
-    return JSON.parse(await readFile(path.join(outDir, MANIFEST_FILE), "utf8"));
+    return JSON.parse(await readFile(path.join(outDir, MANIFEST_FILE), "utf8")) as Manifest;
   } catch (error) {
-    if (error.code === "ENOENT") return null;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+}
+
+export interface WriteManifestInput {
+  config: Config;
+  captures: CaptureEntry[];
+  ranScenarios: string[];
+  /** `null` = every viewport ran. */
+  ranViewports?: string[] | null;
+  failures: ManifestFailure[];
 }
 
 /**
@@ -37,13 +47,13 @@ export async function readManifest(outDir) {
  * selection are carried over from the previous manifest, so `run --only x
  * --viewport mobile` keeps the rest of the index intact.
  */
-export async function writeManifest(outDir, { config, captures, ranScenarios, ranViewports = null, failures }) {
+export async function writeManifest(outDir: string, { config, captures, ranScenarios, ranViewports = null, failures }: WriteManifestInput): Promise<Manifest> {
   const previous = await readManifest(outDir);
-  const ran = (entry) => ranScenarios.includes(entry.scenario) && (!ranViewports || ranViewports.includes(entry.viewport));
+  const ran = (entry: CaptureEntry) => ranScenarios.includes(entry.scenario) && (!ranViewports || ranViewports.includes(entry.viewport));
   const kept = (previous?.captures ?? []).filter((entry) => !ran(entry));
   const merged = [...kept, ...captures].sort((a, b) => a.path.localeCompare(b.path));
 
-  const manifest = {
+  const manifest: Manifest = {
     version: MANIFEST_VERSION,
     generatedAt: new Date().toISOString(),
     baseUrl: config.baseUrl,
@@ -57,7 +67,7 @@ export async function writeManifest(outDir, { config, captures, ranScenarios, ra
   return manifest;
 }
 
-/** Capture id: the path without viewport prefix and extension. */
-export function captureId(relativePath) {
+/** Capture id: the path without extension. */
+export function captureId(relativePath: string): string {
   return relativePath.replace(/\.png$/i, "");
 }

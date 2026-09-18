@@ -7,12 +7,13 @@
 
 import { access, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
-import { crop, readPng, writePng } from "./png.mjs";
+import { crop, readPng, writePng } from "./png.js";
+import type { CaptureEntry, DiffResult, RgbaImage } from "./types.js";
 
 export const PREVIOUS_DIR = ".previous";
 export const DIFF_DIR = ".diff";
 
-async function exists(file) {
+async function exists(file: string): Promise<boolean> {
   try {
     await access(file);
     return true;
@@ -21,13 +22,21 @@ async function exists(file) {
   }
 }
 
+export interface PixelComparison {
+  changedPixels: number;
+  totalPixels: number;
+  ratio: number;
+  sizeChanged: boolean;
+  overlap: { width: number; height: number };
+  /** Highlight image: red changed pixels over a faded copy of `current`. */
+  image: RgbaImage;
+}
+
 /**
  * Compare two RGBA images. A pixel counts as changed when any channel differs
  * by more than `tolerance`. Areas outside the smaller image count as changed.
- *
- * @returns {{ changedPixels: number, totalPixels: number, ratio: number, sizeChanged: boolean, image: object }}
  */
-export function comparePixels(current, baseline, { tolerance = 16 } = {}) {
+export function comparePixels(current: RgbaImage, baseline: RgbaImage, { tolerance = 16 }: { tolerance?: number } = {}): PixelComparison {
   const width = Math.max(current.width, baseline.width);
   const height = Math.max(current.height, baseline.height);
   const overlapWidth = Math.min(current.width, baseline.width);
@@ -43,7 +52,7 @@ export function comparePixels(current, baseline, { tolerance = 16 } = {}) {
       if (inCurrent) {
         const src = (y * current.width + x) * 4;
         // Faded greyscale of the current image as background.
-        const grey = 255 - ((255 - (current.data[src] * 0.299 + current.data[src + 1] * 0.587 + current.data[src + 2] * 0.114)) * 0.35);
+        const grey = 255 - (255 - ((current.data[src] ?? 0) * 0.299 + (current.data[src + 1] ?? 0) * 0.587 + (current.data[src + 2] ?? 0) * 0.114)) * 0.35;
         out[dst] = out[dst + 1] = out[dst + 2] = grey;
         out[dst + 3] = 255;
       } else {
@@ -52,15 +61,17 @@ export function comparePixels(current, baseline, { tolerance = 16 } = {}) {
         out[dst + 2] = 245;
         out[dst + 3] = 255;
       }
-      let differs;
+      let differs: boolean;
       if (inCurrent && inBaseline) {
         const a = (y * current.width + x) * 4;
         const b = (y * baseline.width + x) * 4;
+        const c = current.data;
+        const d = baseline.data;
         differs =
-          Math.abs(current.data[a] - baseline.data[b]) > tolerance ||
-          Math.abs(current.data[a + 1] - baseline.data[b + 1]) > tolerance ||
-          Math.abs(current.data[a + 2] - baseline.data[b + 2]) > tolerance ||
-          Math.abs(current.data[a + 3] - baseline.data[b + 3]) > tolerance;
+          Math.abs((c[a] ?? 0) - (d[b] ?? 0)) > tolerance ||
+          Math.abs((c[a + 1] ?? 0) - (d[b + 1] ?? 0)) > tolerance ||
+          Math.abs((c[a + 2] ?? 0) - (d[b + 2] ?? 0)) > tolerance ||
+          Math.abs((c[a + 3] ?? 0) - (d[b + 3] ?? 0)) > tolerance;
       } else {
         differs = true;
       }
@@ -84,7 +95,7 @@ export function comparePixels(current, baseline, { tolerance = 16 } = {}) {
 }
 
 /** Bounding box of changed (red) pixels in a diff image, or null. */
-function changedBounds(image) {
+function changedBounds(image: RgbaImage): { x: number; y: number; width: number; height: number } | null {
   let minX = image.width;
   let minY = image.height;
   let maxX = -1;
@@ -103,16 +114,23 @@ function changedBounds(image) {
   return maxX < 0 ? null : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
 }
 
+export interface DiffOptions {
+  outDir: string;
+  baselineDir: string;
+  captures: CaptureEntry[];
+  /** Changed-pixel ratio above which a capture counts as changed. */
+  threshold?: number;
+  tolerance?: number;
+  writeImages?: boolean;
+}
+
 /**
  * Diff every capture in `captures` (manifest entries) against `baselineDir`.
  * Writes highlighted diff images under `<outDir>/.diff/<path>` for changed
  * captures.
- *
- * @returns {Promise<object[]>} one result per capture:
- *   `{ path, status: "changed"|"same"|"new"|"error", ratio, changedPixels, sizeChanged, bounds, diffImage }`
  */
-export async function diffCaptures({ outDir, baselineDir, captures, threshold = 0.0005, tolerance = 16, writeImages = true }) {
-  const results = [];
+export async function diffCaptures({ outDir, baselineDir, captures, threshold = 0.0005, tolerance = 16, writeImages = true }: DiffOptions): Promise<DiffResult[]> {
+  const results: DiffResult[] = [];
   for (const capture of captures) {
     const currentFile = path.join(outDir, capture.path);
     const baselineFile = path.join(baselineDir, capture.path);
@@ -124,7 +142,7 @@ export async function diffCaptures({ outDir, baselineDir, captures, threshold = 
       const [current, baseline] = await Promise.all([readPng(currentFile), readPng(baselineFile)]);
       const result = comparePixels(current, baseline, { tolerance });
       const changed = result.ratio > threshold || result.sizeChanged;
-      const entry = {
+      const entry: DiffResult = {
         path: capture.path,
         scenario: capture.scenario,
         viewport: capture.viewport,
@@ -145,15 +163,15 @@ export async function diffCaptures({ outDir, baselineDir, captures, threshold = 
       }
       results.push(entry);
     } catch (error) {
-      results.push({ path: capture.path, scenario: capture.scenario, viewport: capture.viewport, status: "error", message: error.message });
+      results.push({ path: capture.path, scenario: capture.scenario, viewport: capture.viewport, status: "error", message: error instanceof Error ? error.message : String(error) });
     }
   }
   return results;
 }
 
 /** Split a tall image into tiles of `tileHeight` with `overlap` rows shared. */
-export function tile(image, { tileHeight = 1200, overlap = 40 } = {}) {
-  const tiles = [];
+export function tile(image: RgbaImage, { tileHeight = 1200, overlap = 40 }: { tileHeight?: number; overlap?: number } = {}): Array<{ y: number; image: RgbaImage }> {
+  const tiles: Array<{ y: number; image: RgbaImage }> = [];
   if (image.height <= tileHeight) return [{ y: 0, image }];
   let y = 0;
   while (y < image.height) {
@@ -165,14 +183,14 @@ export function tile(image, { tileHeight = 1200, overlap = 40 } = {}) {
 }
 
 /** PNG files under `directory`, relative paths with forward slashes. */
-export async function listPngs(directory, relative = "") {
+export async function listPngs(directory: string, relative = ""): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true });
   } catch {
     return [];
   }
-  const files = [];
+  const files: string[] = [];
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
     const next = relative ? `${relative}/${entry.name}` : entry.name;

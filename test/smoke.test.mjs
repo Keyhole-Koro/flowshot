@@ -60,7 +60,7 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
 });
 
 test("defineScenario validates steps and flows", async () => {
-  const { defineScenario } = await import("../src/index.mjs");
+  const { defineScenario } = await import("../dist/index.js");
   assert.throws(() => defineScenario({ id: "Bad Id", capture() {} }), /id must match/);
   assert.throws(() => defineScenario({ id: "x" }), /capture\(\) function or steps/);
   assert.throws(() => defineScenario({ id: "x", steps: [{ id: "a" }, { id: "b", from: "zzz" }] }), /unknown step/);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { main } from "../src/cli.mjs";
+import { main } from "../dist/cli.js";
 
 main(process.argv.slice(2)).catch((error) => {
   console.error(error instanceof Error ? error.stack || error.message : error);

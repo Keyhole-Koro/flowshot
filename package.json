@@ -13,11 +13,14 @@
     "flowshot": "./bin/flowshot.mjs"
   },
   "exports": {
-    ".": "./src/index.mjs"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "files": [
     "bin",
-    "src",
+    "dist",
     "skills",
     "example",
     "README.md",
@@ -37,11 +40,18 @@
     "llm"
   ],
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "prepare": "npm run build",
+    "test": "npm run build && node --test test/*.test.mjs",
     "example": "node example/serve.mjs 4173",
     "example:capture": "cd example && node ../bin/flowshot.mjs run"
   },
   "devDependencies": {
-    "playwright": "^1.58.2"
-  }
+    "@types/node": "^22.0.0",
+    "playwright": "^1.58.2",
+    "typescript": "^5.9.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts"
 }

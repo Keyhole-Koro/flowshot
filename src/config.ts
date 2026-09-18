@@ -6,8 +6,9 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import type { Config, UserConfig, Viewport } from "./types.js";
 
-export const DEFAULT_VIEWPORTS = [
+export const DEFAULT_VIEWPORTS: Viewport[] = [
   { name: "pc", width: 1440, height: 1000, isMobile: false, hasTouch: false },
   { name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true },
 ];
@@ -27,19 +28,24 @@ const DEFAULTS = {
   launch: { args: ["--no-sandbox"] },
   // Routes to visit once, without a session, before capturing. Dev servers
   // that compile on demand (Vite) otherwise return a blank first paint.
-  warmUp: [],
+  warmUp: [] as string[],
   viewer: { title: "flowshot", subtitle: "Screen capture viewer", lang: "en" },
-};
+} satisfies UserConfig;
 
-const CONFIG_CANDIDATES = ["flowshot.config.mjs", "flowshot.config.js"];
+const CONFIG_CANDIDATES = ["flowshot.config.mjs", "flowshot.config.js", "flowshot.config.ts"];
 
-async function exists(file) {
+async function exists(file: string): Promise<boolean> {
   try {
     await access(file);
     return true;
   } catch {
     return false;
   }
+}
+
+/** Identity helper for typed config files: `export default defineConfig({...})`. */
+export function defineConfig(config: UserConfig): UserConfig {
+  return config;
 }
 
 /**
@@ -49,8 +55,8 @@ async function exists(file) {
  * Environment variables `BASE_URL`, `OUT_DIR` and `CHROMIUM_EXECUTABLE_PATH`
  * override the file so CI and one-off runs need no edits.
  */
-export async function loadConfig({ cwd = process.cwd(), configPath = null } = {}) {
-  let file = configPath ? path.resolve(cwd, configPath) : null;
+export async function loadConfig({ cwd = process.cwd(), configPath = null }: { cwd?: string; configPath?: string | null } = {}): Promise<Config> {
+  let file: string | null = configPath ? path.resolve(cwd, configPath) : null;
   if (!file) {
     for (const candidate of CONFIG_CANDIDATES) {
       const resolved = path.join(cwd, candidate);
@@ -63,12 +69,16 @@ export async function loadConfig({ cwd = process.cwd(), configPath = null } = {}
     throw new Error(`Config file not found: ${file}`);
   }
 
-  const fromFile = file ? (await import(pathToFileURL(file).href)).default ?? {} : {};
-  const merged = {
+  const fromFile: UserConfig = file ? ((await import(pathToFileURL(file).href)) as { default?: UserConfig }).default ?? {} : {};
+  const merged: Config = {
     ...DEFAULTS,
     ...fromFile,
+    scenarios: ([] as string[]).concat(fromFile.scenarios ?? DEFAULTS.scenarios),
+    beforeShoot: fromFile.beforeShoot ?? null,
     launch: { ...DEFAULTS.launch, ...(fromFile.launch ?? {}) },
     viewer: { ...DEFAULTS.viewer, ...(fromFile.viewer ?? {}) },
+    rootDir: file ? path.dirname(file) : cwd,
+    configFile: file,
   };
 
   if (process.env.BASE_URL) merged.baseUrl = process.env.BASE_URL;
@@ -76,8 +86,6 @@ export async function loadConfig({ cwd = process.cwd(), configPath = null } = {}
   if (process.env.CHROMIUM_EXECUTABLE_PATH) merged.launch.executablePath = process.env.CHROMIUM_EXECUTABLE_PATH;
 
   merged.baseUrl = merged.baseUrl.replace(/\/+$/, "");
-  merged.rootDir = file ? path.dirname(file) : cwd;
   merged.outDir = path.resolve(merged.rootDir, merged.outDir);
-  merged.configFile = file;
   return merged;
 }

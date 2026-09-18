@@ -1,47 +1,60 @@
-// Browser-side viewer. `DATA` is injected by build.mjs:
-// { flows, viewports, captures, labels, generatedAt }
-/* global DATA */
+// Browser-side viewer, compiled by tsconfig.client.json into a plain script
+// and inlined into index.html after `const DATA = …` (see build.ts).
+
+const firstFlow = DATA.flows[0];
+if (!firstFlow || !firstFlow.nodes[0] || !DATA.viewports[0]) throw new Error("viewer: no flows or viewports");
 
 const state = {
-  flow: DATA.flows[0].id,
+  flow: firstFlow.id,
   viewport: DATA.viewports[0].name,
-  node: DATA.flows[0].nodes[0].id,
+  node: firstFlow.nodes[0].id,
 };
 
-const captureSet = new Set(DATA.captures.map((capture) => capture.path));
-const element = (id) => document.getElementById(id);
-const currentFlow = () => DATA.flows.find((flow) => flow.id === state.flow);
-const currentNode = () => currentFlow().nodes.find((node) => node.id === state.node);
-const imagePath = (node, viewport = state.viewport) => (node.image ? `${viewport}/${node.image}` : null);
-const hasImage = (node) => Boolean(node.image) && captureSet.has(imagePath(node));
+const label = (key: string): string => DATA.labels[key] ?? key;
 
-function flowViewports(flow) {
+const captureSet = new Set(DATA.captures.map((capture) => capture.path));
+const element = (id: string): HTMLElement => {
+  const found = document.getElementById(id);
+  if (!found) throw new Error(`viewer: missing #${id}`);
+  return found;
+};
+const currentFlow = (): ViewerFlow => DATA.flows.find((flow) => flow.id === state.flow) ?? firstFlow;
+const currentNode = (): ViewerFlowNode => {
+  const flow = currentFlow();
+  return flow.nodes.find((node) => node.id === state.node) ?? (flow.nodes[0] as ViewerFlowNode);
+};
+const imagePath = (node: ViewerFlowNode, viewport = state.viewport): string | null => (node.image ? `${viewport}/${node.image}` : null);
+const hasImage = (node: ViewerFlowNode): boolean => Boolean(node.image) && captureSet.has(imagePath(node) ?? "");
+
+function flowViewports(flow: ViewerFlow): string[] {
   return flow.viewports || DATA.viewports.map((viewport) => viewport.name);
 }
 
-function renderNavigation() {
+function renderNavigation(): void {
   const buttons = DATA.flows.map((flow) => {
     const button = document.createElement("button");
     button.className = "flow-button";
     button.type = "button";
     button.setAttribute("aria-current", String(flow.id === state.flow));
     const small = document.createElement("small");
-    small.textContent = DATA.labels.screens.replace("{n}", String(flow.nodes.length));
+    small.textContent = label("screens").replace("{n}", String(flow.nodes.length));
     button.append(flow.title, small);
     button.onclick = () => {
       state.flow = flow.id;
-      state.node = flow.nodes[0].id;
-      if (!flowViewports(flow).includes(state.viewport)) state.viewport = flowViewports(flow)[0];
+      state.node = flow.nodes[0]?.id ?? state.node;
+      const allowed = flowViewports(flow);
+      if (!allowed.includes(state.viewport)) state.viewport = allowed[0] ?? state.viewport;
       render();
     };
     return button;
   });
-  document.querySelector(".flow-list").replaceChildren(...buttons);
+  document.querySelector(".flow-list")?.replaceChildren(...buttons);
 }
 
-function renderEdge(root, positions, [from, to, label]) {
+function renderEdge(root: HTMLElement, positions: Map<string, { x: number; y: number }>, [from, to, edgeLabel]: [string, string, string?]): void {
   const a = positions.get(from);
   const b = positions.get(to);
+  if (!a || !b) return;
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const distance = Math.hypot(dx, dy) || 1;
@@ -53,17 +66,17 @@ function renderEdge(root, positions, [from, to, label]) {
   edge.style.width = `${Math.max(8, distance - inset * 2)}px`;
   edge.style.transform = `rotate(${(Math.atan2(dy, dx) * 180) / Math.PI}deg)`;
   root.append(edge);
-  if (label) {
+  if (edgeLabel) {
     const text = document.createElement("span");
     text.className = "edge-label";
-    text.textContent = label;
+    text.textContent = edgeLabel;
     text.style.left = `${(a.x + b.x) / 2}px`;
     text.style.top = `${(a.y + b.y) / 2}px`;
     root.append(text);
   }
 }
 
-function renderDiagram() {
+function renderDiagram(): void {
   const flow = currentFlow();
   const root = element("diagram");
   root.style.height = `${flow.diagramHeight || 330}px`;
@@ -92,22 +105,22 @@ function renderDiagram() {
   });
 }
 
-function selectNode(id) {
+function selectNode(id: string): void {
   state.node = id;
   renderDiagram();
   renderDetail();
 }
 
-function renderMetadata(node, image) {
+function renderMetadata(node: ViewerFlowNode, image: string | null): void {
   const capture = DATA.captures.find((entry) => entry.path === image);
   const dl = element("capture-meta");
   dl.replaceChildren();
   if (!capture) return;
-  const rows = [
-    [DATA.labels.size, `${capture.width} × ${capture.height}`],
-    [DATA.labels.url, capture.url || ""],
-    [DATA.labels.capturedAt, capture.capturedAt ? new Date(capture.capturedAt).toLocaleString() : ""],
-    [DATA.labels.scenario, capture.scenario],
+  const rows: Array<[string, string]> = [
+    [label("size"), `${capture.width} × ${capture.height}`],
+    [label("url"), capture.url || ""],
+    [label("capturedAt"), capture.capturedAt ? new Date(capture.capturedAt).toLocaleString() : ""],
+    [label("scenario"), capture.scenario],
   ];
   for (const [term, value] of rows) {
     if (!value) continue;
@@ -119,13 +132,13 @@ function renderMetadata(node, image) {
   }
 }
 
-function renderDetail() {
+function renderDetail(): void {
   const node = currentNode();
   const image = imagePath(node);
-  const original = element("open-original");
+  const original = element("open-original") as HTMLAnchorElement;
   element("node-title").textContent = node.title;
   element("node-condition").textContent = node.condition || "";
-  element("image-path").textContent = image || DATA.labels.noImage;
+  element("image-path").textContent = image || label("noImage");
 
   const preview = element("preview");
   preview.replaceChildren();
@@ -135,7 +148,7 @@ function renderDetail() {
     link.href = image;
     link.target = "_blank";
     link.rel = "noreferrer";
-    link.title = DATA.labels.openOriginal;
+    link.title = label("openOriginal");
     const img = new Image();
     img.src = image;
     img.alt = `${node.title} (${state.viewport})`;
@@ -146,7 +159,7 @@ function renderDetail() {
   } else {
     const empty = document.createElement("div");
     empty.className = "empty-preview";
-    empty.textContent = image ? DATA.labels.missingImage.replace("{path}", image) : node.note || DATA.labels.transitionOnly;
+    empty.textContent = image ? label("missingImage").replace("{path}", image) : node.note || label("transitionOnly");
     preview.append(empty);
     original.removeAttribute("href");
     original.hidden = true;
@@ -160,7 +173,7 @@ function renderDetail() {
     button.setAttribute("aria-pressed", String(item.id === node.id));
     button.onclick = () => selectNode(item.id);
     const img = new Image();
-    img.src = imagePath(item);
+    img.src = imagePath(item) ?? "";
     img.alt = "";
     const label = document.createElement("span");
     label.textContent = item.title;
@@ -170,24 +183,25 @@ function renderDetail() {
   gallery.replaceChildren(...thumbnails);
 }
 
-function render() {
+function render(): void {
   const flow = currentFlow();
   const allowed = flowViewports(flow);
-  if (!allowed.includes(state.viewport)) state.viewport = allowed[0];
+  if (!allowed.includes(state.viewport)) state.viewport = allowed[0] ?? state.viewport;
   element("flow-title").textContent = flow.title;
   element("flow-description").textContent = flow.description || "";
-  document.querySelectorAll("[data-viewport]").forEach((button) => {
-    button.disabled = !allowed.includes(button.dataset.viewport);
-    button.setAttribute("aria-pressed", String(button.dataset.viewport === state.viewport));
+  document.querySelectorAll<HTMLButtonElement>("[data-viewport]").forEach((button) => {
+    const name = button.dataset.viewport ?? "";
+    button.disabled = !allowed.includes(name);
+    button.setAttribute("aria-pressed", String(name === state.viewport));
   });
   renderNavigation();
   renderDiagram();
   renderDetail();
 }
 
-document.querySelectorAll("[data-viewport]").forEach((button) => {
+document.querySelectorAll<HTMLButtonElement>("[data-viewport]").forEach((button) => {
   button.onclick = () => {
-    state.viewport = button.dataset.viewport;
+    state.viewport = button.dataset.viewport ?? state.viewport;
     render();
   };
 });

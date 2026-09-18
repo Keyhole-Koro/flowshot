@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "outDir": "dist/viewer",
+    "rootDir": "src/viewer",
+    "skipLibCheck": true
+  },
+  "files": ["src/viewer/client.ts", "src/viewer/client-globals.d.ts"]
+}

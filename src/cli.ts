@@ -1,21 +1,23 @@
 // CLI entry. Output is plain text by default and JSON with `--json`, so both
 // people and LLM agents can consume it.
 
-import { parseArgs } from "node:util";
+import { access, copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { loadConfig } from "./config.mjs";
-import { loadScenarios } from "./scenario.mjs";
-import { runScenarios } from "./runner.mjs";
-import { buildViewer, collectFlows, missingImages } from "./viewer/build.mjs";
-import { readManifest, MANIFEST_FILE } from "./manifest.mjs";
-import { DIFF_DIR, PREVIOUS_DIR, diffCaptures, listPngs, tile } from "./diff.mjs";
-import { crop, readPng, writePng } from "./png.mjs";
-import { mkdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import { loadConfig } from "./config.js";
+import { DIFF_DIR, PREVIOUS_DIR, diffCaptures, listPngs, tile } from "./diff.js";
+import { MANIFEST_FILE, readManifest } from "./manifest.js";
+import { crop, readPng, writePng } from "./png.js";
+import { runScenarios } from "./runner.js";
+import { loadScenarios } from "./scenario.js";
+import type { Config, DiffResult, Logger } from "./types.js";
+import { buildViewer, collectFlows, missingImages } from "./viewer/build.js";
 
 const HELP = `flowshot — scenario-driven screenshot capture and flow viewer
 
 Usage:
-  flowshot run     [--only <id,...>] [--viewport <name,...>] [--fail-fast] [--no-viewer]
+  flowshot run     [--only <id,...>] [--viewport <name,...>] [--fail-fast] [--no-viewer] [--json]
   flowshot viewer                       Rebuild index.html from manifest.json
   flowshot list    [--json]             List scenarios, viewports and captures
   flowshot lint    [--json]             Check flows against captures and scenario ids
@@ -23,13 +25,13 @@ Usage:
                                         Compare captures with the previous run (or <dir>); writes .diff/ images
   flowshot inspect <capture> [--viewport <name>] [--crop x,y,w,h] [--tile <height>] [--json]
                                         Crop or tile a capture into readable pieces under .inspect/
-  flowshot init    [--skills-dir .claude/skills]
+  flowshot init    [--skills-dir .claude/skills] [--force]
                                         Write a starter config and copy the bundled agent skills
   flowshot help
 
 Options:
   -c, --config <file>   Config file (default: flowshot.config.mjs in cwd)
-      --json            Machine-readable output (list, lint, run summary)
+      --json            Machine-readable output
       --quiet           Suppress progress output
 
 Environment:
@@ -41,19 +43,21 @@ const OPTIONS = {
   only: { type: "string" },
   viewport: { type: "string" },
   "fail-fast": { type: "boolean", default: false },
+  "no-viewer": { type: "boolean", default: false },
   against: { type: "string" },
   threshold: { type: "string" },
   crop: { type: "string" },
   tile: { type: "string" },
   "skills-dir": { type: "string" },
   force: { type: "boolean", default: false },
-  "no-viewer": { type: "boolean", default: false },
   json: { type: "boolean", default: false },
   quiet: { type: "boolean", default: false },
   help: { type: "boolean", short: "h", default: false },
-};
+} as const;
 
-function makeLog(quiet) {
+type Values = ReturnType<typeof parseArgs<{ options: typeof OPTIONS; allowPositionals: true }>>["values"];
+
+function makeLog(quiet: boolean): Logger {
   return {
     info: quiet ? () => {} : (message) => console.log(message),
     warn: (message) => console.warn(message),
@@ -61,9 +65,20 @@ function makeLog(quiet) {
   };
 }
 
-const list = (value) => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : []);
+const list = (value: string | undefined): string[] => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : []);
 
-async function commandRun(config, values, log) {
+const formatRatio = (ratio: number): string => `${(ratio * 100).toFixed(2)}%`;
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function commandRun(config: Config, values: Values, log: Logger): Promise<void> {
   const scenarios = await loadScenarios(config);
   const { manifest, captures, failures } = await runScenarios(scenarios, config, {
     only: list(values.only),
@@ -72,16 +87,13 @@ async function commandRun(config, values, log) {
     log,
   });
 
-  let viewer = null;
-  if (!values["no-viewer"]) {
-    viewer = await buildViewer({ scenarios, config, log });
-  }
+  const viewer = values["no-viewer"] ? null : await buildViewer({ scenarios, config, log });
 
   const summary = {
     outDir: config.outDir,
     captured: captures.length,
     total: manifest.captures.length,
-    failures: failures.map((failure) => ({ scenario: failure.scenario, viewport: failure.viewport, url: failure.url, message: failure.cause?.message ?? String(failure.cause) })),
+    failures: failures.map((failure) => ({ scenario: failure.scenario, viewport: failure.viewport, url: failure.url, message: failure.cause instanceof Error ? failure.cause.message : String(failure.cause) })),
     missing: viewer?.missing ?? [],
   };
   if (values.json) {
@@ -94,13 +106,13 @@ async function commandRun(config, values, log) {
   if (failures.length) process.exitCode = 1;
 }
 
-async function commandViewer(config, values, log) {
+async function commandViewer(config: Config, log: Logger): Promise<void> {
   const scenarios = await loadScenarios(config);
   const { missing } = await buildViewer({ scenarios, config, log });
   if (missing.length) log.warn(`${missing.length} flow node(s) have no capture yet (run \`flowshot lint\` for details)`);
 }
 
-async function commandList(config, values) {
+async function commandList(config: Config, values: Values): Promise<void> {
   const scenarios = await loadScenarios(config);
   const manifest = await readManifest(config.outDir);
   const data = {
@@ -111,8 +123,8 @@ async function commandList(config, values) {
       id: scenario.id,
       title: scenario.title,
       viewports: scenario.viewports ?? null,
-      flows: (scenario.flows ?? []).map((flow) => flow.id),
-      file: path.relative(config.rootDir, scenario.file),
+      flows: scenario.flows.map((flow) => flow.id),
+      file: scenario.file ? path.relative(config.rootDir, scenario.file) : null,
     })),
     captures: manifest?.captures ?? [],
     generatedAt: manifest?.generatedAt ?? null,
@@ -137,19 +149,25 @@ async function commandList(config, values) {
   }
 }
 
-async function commandLint(config, values) {
-  const problems = [];
-  let scenarios = [];
+interface LintProblem {
+  kind: string;
+  message: string;
+  [key: string]: unknown;
+}
+
+async function commandLint(config: Config, values: Values): Promise<void> {
+  const problems: LintProblem[] = [];
+  let scenarios: Awaited<ReturnType<typeof loadScenarios>> = [];
   try {
     scenarios = await loadScenarios(config);
   } catch (error) {
-    problems.push({ kind: "scenario", message: error.message });
+    problems.push({ kind: "scenario", message: error instanceof Error ? error.message : String(error) });
   }
-  let flows = [];
+  let flows: ReturnType<typeof collectFlows> = [];
   try {
     flows = collectFlows(scenarios);
   } catch (error) {
-    problems.push({ kind: "flow", message: error.message });
+    problems.push({ kind: "flow", message: error instanceof Error ? error.message : String(error) });
   }
   const manifest = await readManifest(config.outDir);
   if (manifest) {
@@ -161,7 +179,7 @@ async function commandLint(config, values) {
       if (!referenced.has(`${id}.png`)) problems.push({ kind: "unreferenced-capture", message: `${id}.png is captured but no flow shows it`, id });
     }
     for (const failure of manifest.failures ?? []) {
-      problems.push({ kind: "last-run-failure", message: `${failure.scenario}${failure.viewport ? ` (${failure.viewport})` : ""}: ${failure.message}`, ...failure });
+      problems.push({ ...failure, kind: "last-run-failure", message: `${failure.scenario}${failure.viewport ? ` (${failure.viewport})` : ""}: ${failure.message}` });
     }
   } else {
     problems.push({ kind: "no-manifest", message: `no ${MANIFEST_FILE} in ${config.outDir}; run \`flowshot run\` first` });
@@ -178,11 +196,17 @@ async function commandLint(config, values) {
   if (problems.some((problem) => problem.kind !== "unreferenced-capture")) process.exitCode = 1;
 }
 
-function formatRatio(ratio) {
-  return `${(ratio * 100).toFixed(2)}%`;
+function describeDiff(result: DiffResult): string {
+  if (result.status === "changed") {
+    const size = result.sizeChanged && result.baselineSize && result.size ? ` (size ${result.baselineSize.width}x${result.baselineSize.height} → ${result.size.width}x${result.size.height})` : "";
+    const region = result.bounds ? `  region ${result.bounds.x},${result.bounds.y} ${result.bounds.width}x${result.bounds.height}` : "";
+    return `${formatRatio(result.ratio ?? 0)} changed${size}${region}  → ${result.diffImage ?? ""}`;
+  }
+  if (result.status === "new") return "no baseline";
+  return result.message ?? "";
 }
 
-async function commandDiff(config, values) {
+async function commandDiff(config: Config, values: Values): Promise<void> {
   const manifest = await readManifest(config.outDir);
   if (!manifest) throw new Error(`no ${MANIFEST_FILE} in ${config.outDir}; run \`flowshot run\` first`);
   const baselineDir = values.against ? path.resolve(config.rootDir, values.against) : path.join(config.outDir, PREVIOUS_DIR);
@@ -192,20 +216,20 @@ async function commandDiff(config, values) {
   if (only.length) captures = captures.filter((capture) => only.includes(capture.scenario));
   if (viewports.length) captures = captures.filter((capture) => viewports.includes(capture.viewport));
   if (!values.against) {
-    // Without a baseline dir, only captures that were overwritten in the last run have a previous version.
+    // Without a baseline dir, only captures overwritten in the last run have a previous version.
     const previous = new Set(await listPngs(baselineDir));
     captures = captures.filter((capture) => previous.has(capture.path));
   }
   const threshold = values.threshold ? Number(values.threshold) : 0.0005;
   const results = await diffCaptures({ outDir: config.outDir, baselineDir, captures, threshold });
-  const changed = results.filter((result) => result.status === "changed");
+  const count = (status: DiffResult["status"]) => results.filter((result) => result.status === status).length;
   const summary = {
     baseline: baselineDir,
     compared: results.length,
-    changed: changed.length,
-    same: results.filter((result) => result.status === "same").length,
-    new: results.filter((result) => result.status === "new").length,
-    errors: results.filter((result) => result.status === "error").length,
+    changed: count("changed"),
+    same: count("same"),
+    new: count("new"),
+    errors: count("error"),
     diffDir: path.join(config.outDir, DIFF_DIR),
     results,
   };
@@ -220,41 +244,36 @@ async function commandDiff(config, values) {
   }
   for (const result of results) {
     if (result.status === "same") continue;
-    const detail =
-      result.status === "changed"
-        ? `${formatRatio(result.ratio)} changed${result.sizeChanged ? ` (size ${result.baselineSize.width}x${result.baselineSize.height} → ${result.size.width}x${result.size.height})` : ""}${result.bounds ? `  region ${result.bounds.x},${result.bounds.y} ${result.bounds.width}x${result.bounds.height}` : ""}  → ${result.diffImage}`
-        : result.status === "new"
-          ? "no baseline"
-          : result.message;
-    console.log(`${result.status.padEnd(8)} ${result.path}  ${detail}`);
+    console.log(`${result.status.padEnd(8)} ${result.path}  ${describeDiff(result)}`);
   }
   console.log(`\n${summary.compared} compared: ${summary.changed} changed, ${summary.same} same, ${summary.new} new${summary.errors ? `, ${summary.errors} errors` : ""}`);
 }
 
-async function commandInspect(config, values, positionals) {
+async function commandInspect(config: Config, values: Values, positionals: string[]): Promise<void> {
   const target = positionals[1];
   if (!target) throw new Error("inspect needs a capture id or path, e.g. `flowshot inspect app/billing/01_overview --viewport mobile`");
   const manifest = await readManifest(config.outDir);
-  const viewport = values.viewport ?? config.viewports[0].name;
+  const viewport = values.viewport ?? config.viewports[0]?.name ?? "pc";
   let relative = target.replace(/^\/+/, "");
   if (!relative.endsWith(".png")) relative += ".png";
   // Accept ids (`app/x/01_y`), viewport paths (`mobile/app/x/01_y.png`) and
   // helper trees (`.diff/...`, `.previous/...`).
-  if (!relative.startsWith(".") && !new RegExp(`^(${config.viewports.map((v) => v.name).join("|")})/`).test(relative)) relative = `${viewport}/${relative}`;
+  const viewportPrefix = new RegExp(`^(${config.viewports.map((v) => v.name).join("|")})/`);
+  if (!relative.startsWith(".") && !viewportPrefix.test(relative)) relative = `${viewport}/${relative}`;
   const file = path.join(config.outDir, relative);
   const entry = manifest?.captures.find((capture) => capture.path === relative) ?? null;
 
-  const image = await readPng(file).catch((error) => {
-    throw new Error(`cannot read ${relative}: ${error.message}${manifest ? `. Known captures: run \`flowshot list\`` : ""}`);
+  const image = await readPng(file).catch((error: unknown) => {
+    throw new Error(`cannot read ${relative}: ${error instanceof Error ? error.message : String(error)}. Known captures: run \`flowshot list\``);
   });
   const outDir = path.join(config.outDir, ".inspect");
   await mkdir(outDir, { recursive: true });
-  const base = relative.replace(/\.png$/, "").replace(/[\/]/g, "__");
-  const pieces = [];
+  const base = relative.replace(/\.png$/, "").replace(/[\\/]/g, "__");
+  const pieces: Array<{ file: string; x: number; y: number; width: number; height: number }> = [];
 
   if (values.crop) {
     const [x, y, w, h] = values.crop.split(",").map(Number);
-    if ([x, y, w, h].some(Number.isNaN)) throw new Error("--crop expects x,y,w,h");
+    if (x === undefined || y === undefined || w === undefined || h === undefined || [x, y, w, h].some(Number.isNaN)) throw new Error("--crop expects x,y,w,h");
     const piece = crop(image, x, y, w, h);
     const output = path.join(outDir, `${base}__crop_${x}_${y}_${w}x${h}.png`);
     await writePng(output, piece);
@@ -306,11 +325,9 @@ export default defineScenario({
 `;
 
 /** Write a starter config/scenario (if absent) and copy the bundled skills. */
-async function commandInit(config, values, log) {
-  const { copyFile, readdir, writeFile } = await import("node:fs/promises");
-  const { fileURLToPath } = await import("node:url");
+async function commandInit(config: Config, values: Values, log: Logger): Promise<void> {
   const cwd = process.cwd();
-  const created = [];
+  const created: string[] = [];
 
   if (!config.configFile) {
     const configFile = path.join(cwd, "flowshot.config.mjs");
@@ -324,6 +341,7 @@ async function commandInit(config, values, log) {
     log.info(`config exists: ${path.relative(cwd, config.configFile)} (kept)`);
   }
 
+  // dist/cli.js → ../skills
   const skillsSource = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skills");
   const skillsTarget = path.resolve(cwd, values["skills-dir"] ?? ".claude/skills");
   for (const entry of await readdir(skillsSource, { withFileTypes: true })) {
@@ -332,8 +350,7 @@ async function commandInit(config, values, log) {
     await mkdir(targetDir, { recursive: true });
     for (const file of await readdir(path.join(skillsSource, entry.name))) {
       const target = path.join(targetDir, file);
-      const exists = await import("node:fs/promises").then((fs) => fs.access(target).then(() => true, () => false));
-      if (exists && !values.force) {
+      if ((await exists(target)) && !values.force) {
         log.info(`skill exists: ${path.relative(cwd, target)} (use --force to overwrite)`);
         continue;
       }
@@ -346,21 +363,21 @@ async function commandInit(config, values, log) {
   if (values.json) console.log(JSON.stringify({ created: created.map((file) => path.relative(cwd, file)) }, null, 2));
 }
 
-export async function main(argv) {
+export async function main(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
   const command = positionals[0] ?? "help";
   if (values.help || command === "help") {
     process.stdout.write(HELP);
     return;
   }
-  const log = makeLog(values.quiet || values.json);
+  const log = makeLog(Boolean(values.quiet || values.json));
   const config = await loadConfig({ configPath: values.config ?? null });
 
   switch (command) {
     case "run":
       return commandRun(config, values, log);
     case "viewer":
-      return commandViewer(config, values, log);
+      return commandViewer(config, log);
     case "list":
       return commandList(config, values);
     case "lint":

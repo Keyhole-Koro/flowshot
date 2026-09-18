@@ -3,6 +3,20 @@
 Scenario-driven screenshot capture and flow viewer for web apps — built so that
 both people and LLM agents can verify UI changes at real viewport widths.
 
+![The viewer: a flow diagram of the example site with the mobile capture of the “Email taken” state selected](docs/viewer.png)
+
+Break a mobile layout, run `flowshot run --only public --viewport mobile`, then
+`flowshot diff`:
+
+```
+changed  mobile/public/01_home.png  6.56% changed (size 390x844 → 396x857)  region 0,0 396x857  → .diff/mobile/public/01_home.png
+changed  mobile/public/02_pricing.png  6.22% changed  region 13,161 364x530  → .diff/mobile/public/02_pricing.png
+```
+
+![Before, current and diff crops of the home page at 390px: the third card now overflows the viewport](docs/diff.png)
+
+Both images come from the bundled [`example/`](example/) site.
+
 - **Scenarios** describe how to reach a screen (seed data, mock APIs, click
   through) and what to capture. One browser, one `setup` per scenario, one
   `capture` per viewport.
@@ -16,13 +30,18 @@ both people and LLM agents can verify UI changes at real viewport widths.
 
 ## Install
 
+Written in TypeScript, ships with type declarations, zero runtime
+dependencies (Playwright is a peer).
+
 ```bash
 npm install --save-dev flowshot playwright
 npx playwright install chromium
 ```
 
 `playwright` is a peer dependency; flowshot uses whatever version your
-project has.
+project has. Config and scenario files can be `.mjs` (any Node ≥ 20) or `.ts`
+(Node ≥ 22.18 / 23.6, which strip types natively); `defineConfig` and
+`defineScenario` give you completion and checking either way.
 
 ## Quick start
 
@@ -222,8 +241,15 @@ helpers, test ids) in your own skill or README and point at these.
 
 ```bash
 npm ci && npx playwright install chromium
-npm test            # node --test: end-to-end against example/ plus unit checks
+npm run build       # tsc → dist/ (Node code), dist/viewer/client.js (browser), assets
+npm test            # builds, then node --test: end-to-end against example/ plus unit checks
+npm run example     # serve example/ on :4173; then npm run example:capture
 ```
+
+Layout: `src/` (Node, ESM, `NodeNext`), `src/viewer/client.ts` (browser script
+inlined into `index.html`, compiled by `tsconfig.client.json`), `skills/`
+(Claude Code skills copied by `flowshot init`), `example/`, `test/`, `docs/`
+(README images, regenerated from the example).
 
 ## Roadmap
 

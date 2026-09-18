@@ -5,46 +5,34 @@
 // `from`/`via` (default: the previous step), and positions from a simple
 // layered layout unless a step gives `x`/`y`.
 
-/**
- * @typedef {object} Step
- * @property {string} id
- * @property {string} [title] Node title (default id).
- * @property {string} [condition] Shown under the title: how to reach this screen.
- * @property {string|((state: unknown) => string)} [goto] Path to open before acting.
- * @property {object} [gotoOptions] Passed to `page.goto`.
- * @property {(page: import("playwright").Page, ctx: object) => Promise<void>} [act]
- * @property {string|((page, ctx) => Promise<void>)} [waitFor] test id to wait for, or a function.
- * @property {string} [image] Capture path (without viewport). Omit for a transition-only node.
- * @property {object} [shoot] Options for `ctx.shoot`.
- * @property {string|string[]|null} [from] Predecessor id(s). Default previous step; `null` for none.
- * @property {string} [via] Edge label.
- * @property {string[]} [viewports] Only run for these viewports.
- * @property {string} [note] Explanation for a node without image.
- * @property {number} [x] @property {number} [y] Manual position (%).
- */
+import type { CaptureContext, Flow, FlowEdge, Scenario, Step } from "./types.js";
 
-export function validateSteps(scenarioId, steps) {
+// Step helpers that only read structural fields do not care about State.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyStep = Step<any>;
+
+export function validateSteps(scenarioId: string, steps: AnyStep[]): void {
   if (!Array.isArray(steps) || steps.length === 0) throw new TypeError(`Scenario "${scenarioId}": steps must be a non-empty array`);
-  const ids = new Set();
+  const ids = new Set<string>();
   for (const step of steps) {
     if (!step?.id) throw new TypeError(`Scenario "${scenarioId}": every step needs an id`);
     if (ids.has(step.id)) throw new TypeError(`Scenario "${scenarioId}": duplicate step id "${step.id}"`);
     ids.add(step.id);
   }
   for (const step of steps) {
-    for (const from of [].concat(step.from ?? [])) {
+    for (const from of ([] as string[]).concat(step.from ?? [])) {
       if (from && !ids.has(from)) throw new TypeError(`Scenario "${scenarioId}": step "${step.id}" comes from unknown step "${from}"`);
     }
   }
 }
 
 /** Build the `capture(ctx)` that walks the steps on one page. */
-export function captureFromSteps(scenario) {
+export function captureFromSteps<State>(scenario: Scenario<State>): (ctx: CaptureContext<State>) => Promise<void> {
   return async function capture(ctx) {
     const pageOptions = typeof scenario.page === "function" ? await scenario.page(ctx) : scenario.page ?? {};
     const page = await ctx.newPage(pageOptions);
     if (scenario.prepare) await scenario.prepare(page, ctx);
-    for (const step of scenario.steps) {
+    for (const step of scenario.steps ?? []) {
       if (step.viewports && !step.viewports.includes(ctx.viewport.name)) continue;
       ctx.log.info(`  step ${step.id}`);
       if (step.goto) {
@@ -60,11 +48,12 @@ export function captureFromSteps(scenario) {
 }
 
 /** Edges as `[from, to, label]` from `from`/`via`, defaulting to a chain. */
-export function edgesFromSteps(steps) {
-  const edges = [];
+export function edgesFromSteps(steps: AnyStep[]): FlowEdge[] {
+  const edges: FlowEdge[] = [];
   steps.forEach((step, index) => {
     if (step.from === null) return;
-    const sources = step.from === undefined ? (index > 0 ? [steps[index - 1].id] : []) : [].concat(step.from);
+    const previous = steps[index - 1];
+    const sources = step.from === undefined ? (previous ? [previous.id] : []) : ([] as string[]).concat(step.from);
     for (const from of sources) edges.push([from, step.id, step.via ?? ""]);
   });
   return edges;
@@ -72,20 +61,21 @@ export function edgesFromSteps(steps) {
 
 /**
  * Layered layout: depth = longest path from a root; nodes of one depth share
- * a column and are spread evenly down it. Returns `{ id: { x, y } }` in %.
+ * a column and are spread evenly down it. Returns positions in %.
  */
-export function layoutSteps(steps, edges) {
+export function layoutSteps(steps: AnyStep[], edges: FlowEdge[]): Record<string, { x: number; y: number }> {
   const ids = steps.map((step) => step.id);
-  const incoming = new Map(ids.map((id) => [id, []]));
-  for (const [from, to] of edges) incoming.get(to).push(from);
+  const incoming = new Map<string, string[]>(ids.map((id) => [id, []]));
+  for (const [from, to] of edges) incoming.get(to)?.push(from);
 
-  const depth = new Map();
-  const visiting = new Set();
-  const resolve = (id) => {
-    if (depth.has(id)) return depth.get(id);
+  const depth = new Map<string, number>();
+  const visiting = new Set<string>();
+  const resolve = (id: string): number => {
+    const known = depth.get(id);
+    if (known !== undefined) return known;
     if (visiting.has(id)) return 0; // cycle: treat as root
     visiting.add(id);
-    const parents = incoming.get(id);
+    const parents = incoming.get(id) ?? [];
     const value = parents.length ? Math.max(...parents.map(resolve)) + 1 : 0;
     visiting.delete(id);
     depth.set(id, value);
@@ -93,14 +83,14 @@ export function layoutSteps(steps, edges) {
   };
   ids.forEach(resolve);
 
-  const columns = new Map();
+  const columns = new Map<number, string[]>();
   for (const id of ids) {
-    const d = depth.get(id);
+    const d = depth.get(id) ?? 0;
     if (!columns.has(d)) columns.set(d, []);
-    columns.get(d).push(id);
+    columns.get(d)?.push(id);
   }
   const columnCount = Math.max(...columns.keys()) + 1;
-  const positions = {};
+  const positions: Record<string, { x: number; y: number }> = {};
   for (const [d, members] of columns) {
     members.forEach((id, index) => {
       positions[id] = {
@@ -113,11 +103,11 @@ export function layoutSteps(steps, edges) {
 }
 
 /** The flow generated from `steps` (id = scenario id unless `flow.id` given). */
-export function flowFromSteps(scenario) {
-  const steps = scenario.steps;
+export function flowFromSteps<State>(scenario: Scenario<State>): Flow {
+  const steps: AnyStep[] = scenario.steps ?? [];
   const edges = edgesFromSteps(steps);
   const positions = layoutSteps(steps, edges);
-  const columnSizes = new Map();
+  const columnSizes = new Map<number, number>();
   for (const { x } of Object.values(positions)) columnSizes.set(x, (columnSizes.get(x) ?? 0) + 1);
   const rows = Math.max(1, ...columnSizes.values());
   return {
@@ -132,8 +122,8 @@ export function flowFromSteps(scenario) {
       condition: step.condition ?? "",
       image: step.image,
       note: step.note,
-      x: step.x ?? positions[step.id].x,
-      y: step.y ?? positions[step.id].y,
+      x: step.x ?? positions[step.id]?.x ?? 50,
+      y: step.y ?? positions[step.id]?.y ?? 50,
     })),
     edges,
   };
