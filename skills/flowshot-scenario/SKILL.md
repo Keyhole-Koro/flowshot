@@ -18,7 +18,7 @@ can find in a flow, or a flow node with no screenshot, both fail
 `capture()` and the flow (nodes, edges, layout) from the list:
 
 ```ts
-import { defineScenario } from "flowshot";
+import { defineScenario } from "@keyhole-koro/flowshot";
 
 export default defineScenario({
   id: "password-reset",

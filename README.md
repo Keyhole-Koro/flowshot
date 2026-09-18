@@ -33,10 +33,11 @@ Both images come from the bundled [`example/`](example/) site.
 Written in TypeScript, ships with type declarations, zero runtime
 dependencies (Playwright is a peer).
 
-> **Not on npm yet.** The `flowshot` name on the npm registry belongs to an
-> unrelated package — do not `npm install flowshot`. Install from GitHub or
-> as a git submodule; either way the package is named `flowshot` inside
-> `node_modules`, so `import { defineScenario } from "flowshot"` works.
+The package is `@keyhole-koro/flowshot` (the unscoped `flowshot` on npm is
+an unrelated project); the CLI is still `npx flowshot`. Until it is
+published, install from GitHub or as a git submodule — both put it at
+`node_modules/@keyhole-koro/flowshot`, so
+`import { defineScenario } from "@keyhole-koro/flowshot"` works either way.
 
 ### Requirements
 
@@ -55,6 +56,7 @@ npx playwright install chromium
 
 npm runs the package's `prepare` script on install, which compiles
 `src/` to `dist/`. Pin a commit with `github:Keyhole-Koro/flowshot#<sha>`.
+Once published: `npm install --save-dev @keyhole-koro/flowshot playwright`.
 
 ### Option B — git submodule (when you want to hack on flowshot too)
 
@@ -150,7 +152,7 @@ still pass `npm ci`; the link just dangles.
 `flowshot.config.ts` in your project root:
 
 ```ts
-import { defineConfig } from "flowshot";
+import { defineConfig } from "@keyhole-koro/flowshot";
 
 export default defineConfig({
   baseUrl: "http://localhost:3000",
@@ -166,7 +168,7 @@ export default defineConfig({
 `captures/scenarios/public.ts`:
 
 ```ts
-import { defineScenario } from "flowshot";
+import { defineScenario } from "@keyhole-koro/flowshot";
 
 export default defineScenario({
   id: "public",

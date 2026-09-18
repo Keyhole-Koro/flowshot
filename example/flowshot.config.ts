@@ -1,4 +1,4 @@
-import { defineConfig } from "flowshot";
+import { defineConfig } from "@keyhole-koro/flowshot";
 
 export default defineConfig({
   baseUrl: "http://127.0.0.1:4173",

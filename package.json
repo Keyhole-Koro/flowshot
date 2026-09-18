@@ -1,5 +1,5 @@
 {
-  "name": "flowshot",
+  "name": "@keyhole-koro/flowshot",
   "version": "0.1.0",
   "description": "Scenario-driven screenshot capture and flow viewer for web apps, designed for LLM-assisted UI verification.",
   "license": "MIT",
@@ -53,5 +53,8 @@
     "typescript": "^5.9.0"
   },
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts"
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  }
 }

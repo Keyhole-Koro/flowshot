@@ -1,4 +1,4 @@
-import { defineScenario } from "flowshot";
+import { defineScenario } from "@keyhole-koro/flowshot";
 
 // Imperative: hand-written capture() with an explicit flow, one viewport only.
 export default defineScenario({

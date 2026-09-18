@@ -1,4 +1,4 @@
-import { defineScenario } from "flowshot";
+import { defineScenario } from "@keyhole-koro/flowshot";
 
 // Declarative: steps generate both the capture and the flow diagram.
 export default defineScenario({

@@ -303,7 +303,7 @@ function supportsTypeStripping(): boolean {
 }
 
 const STARTER_CONFIG = (ts: boolean) => `// flowshot configuration. See https://github.com/Keyhole-Koro/flowshot#config
-${ts ? 'import { defineConfig } from "flowshot";\n\nexport default defineConfig({' : "export default {"}
+${ts ? 'import { defineConfig } from "@keyhole-koro/flowshot";\n\nexport default defineConfig({' : "export default {"}
   baseUrl: "http://localhost:3000",
   outDir: "output/captures",
   scenarios: ["flowshot/scenarios/*.${ts ? "ts" : "mjs"}"],
@@ -319,7 +319,7 @@ ${ts ? 'import { defineConfig } from "flowshot";\n\nexport default defineConfig(
 ${ts ? "});" : "};"}
 `;
 
-const STARTER_SCENARIO = `import { defineScenario } from "flowshot";
+const STARTER_SCENARIO = `import { defineScenario } from "@keyhole-koro/flowshot";
 
 export default defineScenario({
   id: "public",
