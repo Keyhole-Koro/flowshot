@@ -10,7 +10,7 @@
   },
   "type": "module",
   "bin": {
-    "flowshot": "./bin/flowshot.js"
+    "flowshot": "bin/flowshot.js"
   },
   "exports": {
     ".": {
