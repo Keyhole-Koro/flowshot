@@ -154,8 +154,8 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
     .replace("/*{{data}}*/", () => `const DATA = ${JSON.stringify(data).replace(/</g, "\\u003c")};`)
     .replace("/*{{js}}*/", () => js);
 
-  const output = path.join(config.outDir, "index.html");
+  const output = path.resolve(config.outDir, "index.html");
   await writeFile(output, html, "utf8");
-  log?.info(`saved ${path.relative(process.cwd(), output)} (${manifest.captures.length} captures, ${flows.length} flows)`);
+  log?.info(`saved ${output} (${manifest.captures.length} captures, ${flows.length} flows)`);
   return { output, flows, missing: missingImages(flows, manifest) };
 }

@@ -18,8 +18,8 @@ changed  mobile/public/02_pricing.png  6.22% changed  region 13,161 364x530  →
 Both images come from the bundled [`example/`](example/) site.
 
 - **Scenarios** describe how to reach a screen (seed data, mock APIs, click
-  through) and what to capture. One browser, one `setup` per scenario, one
-  `capture` per viewport.
+  through) and what to capture. One browser and one `setup` per scenario;
+  viewport captures run with bounded concurrency.
 - **Flows** map captures onto transition diagrams so a reviewer can see *why*
   a screen appears, not just what it looks like.
 - **`manifest.json`** indexes every capture (path, viewport, size, URL, time)
@@ -97,6 +97,10 @@ still pass `npm ci`; the link just dangles.
    },
    ```
 
+   `concurrency: "auto"` (the default) selects up to four workers from the
+   available CPU count. Viewport captures share the `setup()` state; set
+   `concurrency: 1` if they mutate that state and must run in order.
+
 3. **Write scenarios** under `flowshot/scenarios/` — one file per user path
    (see [Quick start](#quick-start) and [Scenario API](#scenario-api)).
    Seed state in `setup()` (write to your DB or call your API), inject a
@@ -107,6 +111,7 @@ still pass `npm ci`; the link just dangles.
 
    ```bash
    npx flowshot run           # everything
+   npx flowshot run --concurrency 2  # limit to two viewport workers
    npx flowshot lint          # every flow node captured, nothing orphaned
    ```
 
@@ -157,6 +162,7 @@ import { defineConfig } from "@keyhole-koro/flowshot";
 export default defineConfig({
   baseUrl: "http://localhost:3000",
   outDir: "output/captures",
+  concurrency: "auto",
   scenarios: ["captures/scenarios/*.ts"],
   viewports: [
     { name: "pc", width: 1440, height: 1000 },
@@ -275,6 +281,7 @@ without `image` is a transition target (e.g. “redirect back”); give it a
 | --- | --- | --- |
 | `baseUrl` | `http://localhost:3000` | env `BASE_URL` overrides |
 | `outDir` | `output/captures` | env `OUT_DIR` overrides; relative to the config file |
+| `concurrency` | `"auto"` | concurrent viewport captures; auto uses half the available CPUs, up to 4 workers; set an integer from 1 to 32 to choose explicitly |
 | `scenarios` | `flowshot/scenarios/*.{mjs,ts,mts}` | globs (`*`, `**`) or file paths |
 | `viewports` | pc 1440×1000, mobile 390×844 | `{ name, width, height, isMobile?, hasTouch? }` |
 | `settleMs` | `600` | quiet time before each screenshot |
@@ -301,7 +308,9 @@ output/captures/
 `run --only <id> [--viewport v]` replaces only the matching entries in the
 manifest, so partial re-captures keep the index whole. Failures do not abort
 the run by default (`--fail-fast` to change); they are listed at the end, in
-the manifest, and the exit code is 1.
+the manifest, and the exit code is 1. `run --concurrency <auto|n>` overrides
+the config setting for one run. `--fail-fast` waits for already-running
+viewport captures to finish before stopping.
 
 ### diff
 

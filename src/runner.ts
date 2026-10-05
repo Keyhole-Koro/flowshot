@@ -2,11 +2,12 @@
 // viewport, and a manifest at the end.
 
 import { access, copyFile, mkdir } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { PREVIOUS_DIR } from "./diff.js";
 import { captureId, pngSize, writeManifest } from "./manifest.js";
-import type { CaptureContext, CaptureEntry, Config, Logger, Manifest, NewContextOptions, Scenario, ShootOptions, Viewport } from "./types.js";
+import type { CaptureContext, CaptureEntry, Concurrency, Config, Logger, Manifest, NewContextOptions, Scenario, ShootOptions, Viewport } from "./types.js";
 
 const noopLog: Logger = { info() {}, warn() {}, error() {} };
 
@@ -173,6 +174,8 @@ export interface RunOptions {
   viewports?: string[];
   /** Continue after a scenario fails (default true). */
   keepGoing?: boolean;
+  /** Concurrent viewport captures. */
+  concurrency?: Concurrency;
   log?: Logger;
 }
 
@@ -180,10 +183,30 @@ export interface RunResult {
   manifest: Manifest;
   captures: CaptureEntry[];
   failures: ScenarioError[];
+  workers: number;
+}
+
+const MAX_AUTO_WORKERS = 4;
+
+function resolveWorkerCount(concurrency: Concurrency, taskCount: number): number {
+  const requested = concurrency === "auto"
+    ? Math.min(MAX_AUTO_WORKERS, Math.max(1, Math.floor(availableParallelism() / 2)))
+    : concurrency;
+  return Math.max(1, Math.min(Math.max(1, taskCount), requested));
+}
+
+async function runPool<T>(items: T[], workerCount: number, shouldStop: () => boolean, worker: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(workerCount, items.length) }, async () => {
+    while (next < items.length && !shouldStop()) {
+      const item = items[next++]!;
+      await worker(item);
+    }
+  }));
 }
 
 /** Run scenarios and write the manifest. */
-export async function runScenarios(scenarios: Scenario[], config: Config, { only, viewports, keepGoing = true, log = noopLog }: RunOptions = {}): Promise<RunResult> {
+export async function runScenarios(scenarios: Scenario[], config: Config, { only, viewports, keepGoing = true, concurrency: concurrencyOverride, log = noopLog }: RunOptions = {}): Promise<RunResult> {
   const selected = only?.length ? scenarios.filter((scenario) => only.includes(scenario.id)) : scenarios;
   if (only?.length) {
     const missing = only.filter((id) => !scenarios.some((scenario) => scenario.id === id));
@@ -194,6 +217,14 @@ export async function runScenarios(scenarios: Scenario[], config: Config, { only
     const missing = viewportFilter.filter((name) => !config.viewports.some((viewport) => viewport.name === name));
     if (missing.length) throw new Error(`Unknown viewport(s): ${missing.join(", ")}. Known: ${config.viewports.map((v) => v.name).join(", ")}`);
   }
+
+  const concurrency = concurrencyOverride ?? config.concurrency;
+  const viewportsFor = (scenario: Scenario) => config.viewports.filter(
+    (viewport) => (!scenario.viewports || scenario.viewports.includes(viewport.name)) && (!viewportFilter || viewportFilter.includes(viewport.name)),
+  );
+  const taskCount = Math.max(0, ...selected.map((scenario) => viewportsFor(scenario).length));
+  const workers = resolveWorkerCount(concurrency, taskCount);
+  log.info(`capture workers: ${workers} (${concurrency})`);
 
   await mkdir(config.outDir, { recursive: true });
   const captures: CaptureEntry[] = [];
@@ -206,9 +237,7 @@ export async function runScenarios(scenarios: Scenario[], config: Config, { only
 
     for (const scenario of selected) {
       log.info(`\n== ${scenario.id}: ${scenario.title} ==`);
-      const scenarioViewports = config.viewports.filter(
-        (viewport) => (!scenario.viewports || scenario.viewports.includes(viewport.name)) && (!viewportFilter || viewportFilter.includes(viewport.name)),
-      );
+      const scenarioViewports = viewportsFor(scenario);
       if (scenarioViewports.length === 0) {
         log.warn(`  skipped: no matching viewport`);
         continue;
@@ -225,20 +254,25 @@ export async function runScenarios(scenarios: Scenario[], config: Config, { only
         continue;
       }
 
-      for (const viewport of scenarioViewports) {
+      let stopScheduling = false;
+      let firstFailure: ScenarioError | null = null;
+      await runPool(scenarioViewports, workers, () => stopScheduling, async (viewport) => {
         log.info(`-- ${viewport.name} (${viewport.width}x${viewport.height})`);
-        const ctx = createCaptureContext({ browser, config, scenario, viewport, state, log, captures, backedUp });
+        let ctx: TrackedContext<unknown> | null = null;
         try {
+          ctx = createCaptureContext({ browser, config, scenario, viewport, state, log, captures, backedUp });
           await scenario.capture(ctx);
         } catch (cause) {
-          const failure = new ScenarioError(scenario.id, viewport.name, cause, ctx.lastUrl);
+          const failure = new ScenarioError(scenario.id, viewport.name, cause, ctx?.lastUrl ?? null);
           failures.push(failure);
+          firstFailure ??= failure;
           log.error(`  ${failure.message}`);
-          if (!keepGoing) throw failure;
+          if (!keepGoing) stopScheduling = true;
         } finally {
-          await ctx.closeAll();
+          if (ctx) await ctx.closeAll();
         }
-      }
+      });
+      if (!keepGoing && firstFailure) throw firstFailure;
 
       if (scenario.teardown) {
         await scenario.teardown({ config, baseUrl: config.baseUrl, state, log }).catch((cause: unknown) => log.warn(`  teardown failed: ${cause instanceof Error ? cause.message : String(cause)}`));
@@ -255,5 +289,5 @@ export async function runScenarios(scenarios: Scenario[], config: Config, { only
     ranViewports: viewportFilter,
     failures: failures.map(({ scenario, viewport, message, url }) => ({ scenario, viewport, message, url })),
   });
-  return { manifest, captures, failures };
+  return { manifest, captures, failures, workers };
 }

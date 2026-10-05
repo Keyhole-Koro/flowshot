@@ -5,7 +5,7 @@ import { access, copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { loadConfig } from "./config.js";
+import { loadConfig, parseConcurrency } from "./config.js";
 import { DIFF_DIR, PREVIOUS_DIR, diffCaptures, listPngs, tile } from "./diff.js";
 import { MANIFEST_FILE, readManifest } from "./manifest.js";
 import { crop, readPng, writePng } from "./png.js";
@@ -17,7 +17,7 @@ import { buildViewer, collectFlows, missingImages } from "./viewer/build.js";
 const HELP = `flowshot — scenario-driven screenshot capture and flow viewer
 
 Usage:
-  flowshot run     [--only <id,...>] [--viewport <name,...>] [--fail-fast] [--no-viewer] [--json]
+  flowshot run     [--only <id,...>] [--viewport <name,...>] [--concurrency <auto|n>] [--fail-fast] [--no-viewer] [--json]
   flowshot viewer                       Rebuild index.html from manifest.json
   flowshot list    [--json]             List scenarios, viewports and captures
   flowshot lint    [--json]             Check flows against captures and scenario ids
@@ -31,6 +31,7 @@ Usage:
 
 Options:
   -c, --config <file>   Config file (default: flowshot.config.{ts,mts,mjs,js} in cwd)
+      --concurrency     Concurrent viewport captures: auto or an integer from 1 to 32
       --json            Machine-readable output
       --quiet           Suppress progress output
 
@@ -40,6 +41,7 @@ Environment:
 
 const OPTIONS = {
   config: { type: "string", short: "c" },
+  concurrency: { type: "string" },
   only: { type: "string" },
   viewport: { type: "string" },
   "fail-fast": { type: "boolean", default: false },
@@ -80,10 +82,11 @@ async function exists(file: string): Promise<boolean> {
 
 async function commandRun(config: Config, values: Values, log: Logger): Promise<void> {
   const scenarios = await loadScenarios(config);
-  const { manifest, captures, failures } = await runScenarios(scenarios, config, {
+  const { manifest, captures, failures, workers } = await runScenarios(scenarios, config, {
     only: list(values.only),
     viewports: list(values.viewport),
     keepGoing: !values["fail-fast"],
+    concurrency: values.concurrency === undefined ? undefined : parseConcurrency(values.concurrency),
     log,
   });
 
@@ -93,6 +96,7 @@ async function commandRun(config: Config, values: Values, log: Logger): Promise<
     outDir: config.outDir,
     captured: captures.length,
     total: manifest.captures.length,
+    workers,
     failures: failures.map((failure) => ({ scenario: failure.scenario, viewport: failure.viewport, url: failure.url, message: failure.cause instanceof Error ? failure.cause.message : String(failure.cause) })),
     missing: viewer?.missing ?? [],
   };
@@ -311,6 +315,7 @@ ${ts ? 'import { defineConfig } from "@keyhole-koro/flowshot";\n\nexport default
     { name: "pc", width: 1440, height: 1000, isMobile: false, hasTouch: false },
     { name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true },
   ],
+  concurrency: "auto",
   // Routes to open once before capturing (on-demand dev servers paint blank the first time).
   warmUp: [],
   // Wait for client-side rendering before each screenshot, e.g.:

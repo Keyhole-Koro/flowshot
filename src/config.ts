@@ -6,7 +6,7 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Config, UserConfig, Viewport } from "./types.js";
+import type { Concurrency, Config, UserConfig, Viewport } from "./types.js";
 
 export const DEFAULT_VIEWPORTS: Viewport[] = [
   { name: "pc", width: 1440, height: 1000, isMobile: false, hasTouch: false },
@@ -16,6 +16,7 @@ export const DEFAULT_VIEWPORTS: Viewport[] = [
 const DEFAULTS = {
   baseUrl: "http://localhost:3000",
   outDir: "output/captures",
+  concurrency: "auto" as Concurrency,
   viewports: DEFAULT_VIEWPORTS,
   scenarios: ["flowshot/scenarios/*.mjs", "flowshot/scenarios/*.ts", "flowshot/scenarios/*.mts"],
   // Milliseconds to wait after the page settles before taking a screenshot,
@@ -31,6 +32,16 @@ const DEFAULTS = {
   warmUp: [] as string[],
   viewer: { title: "flowshot", subtitle: "Screen capture viewer", lang: "en" },
 } satisfies UserConfig;
+
+const MAX_CONCURRENCY = 32;
+
+/** Parse config and CLI concurrency values consistently. */
+export function parseConcurrency(value: unknown): Concurrency {
+  if (value === "auto") return "auto";
+  const parsed = typeof value === "string" && /^[0-9]+$/.test(value) ? Number(value) : value;
+  if (typeof parsed === "number" && Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_CONCURRENCY) return parsed;
+  throw new Error(`concurrency must be "auto" or an integer between 1 and ${MAX_CONCURRENCY}`);
+}
 
 const CONFIG_CANDIDATES = ["flowshot.config.ts", "flowshot.config.mts", "flowshot.config.mjs", "flowshot.config.js"];
 
@@ -73,6 +84,7 @@ export async function loadConfig({ cwd = process.cwd(), configPath = null }: { c
   const merged: Config = {
     ...DEFAULTS,
     ...fromFile,
+    concurrency: parseConcurrency(fromFile.concurrency ?? DEFAULTS.concurrency),
     scenarios: ([] as string[]).concat(fromFile.scenarios ?? DEFAULTS.scenarios),
     beforeShoot: fromFile.beforeShoot ?? null,
     launch: { ...DEFAULTS.launch, ...(fromFile.launch ?? {}) },

@@ -46,9 +46,13 @@ export interface ViewerConfig {
 }
 
 /** What `flowshot.config.mjs` may export. Every field is optional. */
+export type Concurrency = number | "auto";
+
 export interface UserConfig {
   baseUrl?: string;
   outDir?: string;
+  /** Concurrent viewport captures; `auto` uses half the available CPUs, up to four workers. */
+  concurrency?: Concurrency;
   /** Glob patterns (`*`, `**`) or file paths, relative to the config file. */
   scenarios?: string | string[];
   viewports?: Viewport[];
