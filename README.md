@@ -341,13 +341,14 @@ The CLI is designed to be driven by an agent verifying its own UI changes:
 3. `flowshot diff --only <scenario>` → changed regions; `flowshot inspect … --crop` to read them.
 4. `flowshot lint --json` → nothing missing, nothing orphaned.
 
-`npx flowshot init` copies three Claude Code skills into `.claude/skills/`:
+`npx flowshot init` copies four Claude Code skills into `.claude/skills/`:
 
 | skill | when it triggers |
 | --- | --- |
 | `flowshot-verify` | after a UI change: re-capture, diff, read, report |
 | `flowshot-scenario` | a screen or path was added: write/extend a scenario and its flow |
 | `flowshot-triage` | a run failed or a capture shows the wrong screen |
+| `flowshot-coverage` | survey the app for screens and states nothing captures yet, ranked |
 
 They are generic; keep project specifics (how to launch the app, seed
 helpers, test ids) in your own skill or README and point at these.
