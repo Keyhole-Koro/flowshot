@@ -22,8 +22,12 @@
           <h1 id="flow-title"></h1>
           <p class="description" id="flow-description"></p>
         </div>
-        <div class="viewport-toggle" aria-label="{{labels.viewportsLabel}}">{{viewportButtons}}</div>
+        <div class="toggles">
+          <div class="toggle" role="group" aria-label="{{labels.viewMode}}"><button type="button" data-view="diagram" aria-pressed="true">{{labels.viewDiagram}}</button><button type="button" data-view="grid" aria-pressed="false">{{labels.viewGrid}}</button></div>
+          <div class="toggle viewport-toggle" role="group" aria-label="{{labels.viewportsLabel}}">{{viewportButtons}}</div>
+        </div>
       </div>
+      <div id="diagram-view">
       <section class="diagram-wrap" aria-label="{{labels.diagram}}">
         <div class="diagram" id="diagram"></div>
       </section>
@@ -39,6 +43,8 @@
       </section>
       <h2 class="gallery-title">{{labels.sameFlow}}</h2>
       <div class="gallery" id="gallery"></div>
+      </div>
+      <section class="grid" id="grid-view" aria-label="{{labels.viewGrid}}" hidden></section>
     </main>
   </div>
   <script>

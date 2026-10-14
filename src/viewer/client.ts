@@ -8,6 +8,8 @@ const state = {
   flow: firstFlow.id,
   viewport: DATA.viewports[0].name,
   node: firstFlow.nodes[0].id,
+  // "#grid" in the URL opens the grid, so it can be linked to.
+  view: location.hash === "#grid" ? "grid" : "diagram",
 };
 
 const label = (key: string): string => DATA.labels[key] ?? key;
@@ -183,6 +185,57 @@ function renderDetail(): void {
   gallery.replaceChildren(...thumbnails);
 }
 
+function setView(view: string): void {
+  state.view = view === "grid" ? "grid" : "diagram";
+  history.replaceState(null, "", state.view === "grid" ? "#grid" : location.pathname + location.search);
+  render();
+}
+
+// Every captured screen of the flow side by side, cropped to the first viewport
+// height so states line up. A card opens that screen in the diagram view.
+function renderGrid(): void {
+  const viewport = DATA.viewports.find((item) => item.name === state.viewport);
+  const grid = element("grid-view");
+  if (viewport) {
+    grid.style.setProperty("--card-width", viewport.width <= 600 ? "210px" : "420px");
+    grid.style.setProperty("--card-aspect", `${viewport.width} / ${viewport.height}`);
+  }
+  const cards = currentFlow().nodes.filter((node) => node.image).map((node) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "card";
+    card.onclick = () => {
+      state.node = node.id;
+      setView("diagram");
+    };
+    const head = document.createElement("span");
+    head.className = "card-head";
+    const title = document.createElement("span");
+    title.className = "card-title";
+    title.textContent = node.title;
+    const condition = document.createElement("span");
+    condition.className = "card-condition";
+    condition.textContent = node.condition || "";
+    head.append(title, condition);
+    const shot = document.createElement("span");
+    shot.className = "card-shot";
+    const image = imagePath(node) ?? "";
+    if (hasImage(node)) {
+      const img = new Image();
+      img.src = image;
+      img.alt = `${node.title} (${state.viewport})`;
+      img.loading = "lazy";
+      shot.append(img);
+    } else {
+      shot.classList.add("is-missing");
+      shot.textContent = label("missingImage").replace("{path}", image);
+    }
+    card.append(head, shot);
+    return card;
+  });
+  grid.replaceChildren(...cards);
+}
+
 function render(): void {
   const flow = currentFlow();
   const allowed = flowViewports(flow);
@@ -194,9 +247,19 @@ function render(): void {
     button.disabled = !allowed.includes(name);
     button.setAttribute("aria-pressed", String(name === state.viewport));
   });
+  document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.view === state.view));
+  });
+  const grid = state.view === "grid";
+  element("diagram-view").hidden = grid;
+  element("grid-view").hidden = !grid;
   renderNavigation();
-  renderDiagram();
-  renderDetail();
+  if (grid) {
+    renderGrid();
+  } else {
+    renderDiagram();
+    renderDetail();
+  }
 }
 
 document.querySelectorAll<HTMLButtonElement>("[data-viewport]").forEach((button) => {
@@ -205,5 +268,10 @@ document.querySelectorAll<HTMLButtonElement>("[data-viewport]").forEach((button)
     render();
   };
 });
-window.addEventListener("resize", renderDiagram);
+document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
+  button.onclick = () => setView(button.dataset.view ?? "diagram");
+});
+window.addEventListener("resize", () => {
+  if (state.view === "diagram") renderDiagram();
+});
 render();

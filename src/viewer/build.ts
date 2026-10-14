@@ -15,6 +15,9 @@ const DEFAULT_LABELS: ViewerLabels = {
   diagram: "Flow diagram",
   screens: "{n} screens",
   sameFlow: "Screens in this flow",
+  viewMode: "View",
+  viewDiagram: "Diagram",
+  viewGrid: "All screens",
   openOriginal: "Open full size",
   noImage: "No capture (transition target)",
   transitionOnly: "This node is a transition target and has no screenshot.",
@@ -149,6 +152,9 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
     .replaceAll("{{labels.viewportsLabel}}", escapeHtml(labels.viewportsLabel))
     .replaceAll("{{labels.diagram}}", escapeHtml(labels.diagram))
     .replaceAll("{{labels.sameFlow}}", escapeHtml(labels.sameFlow))
+    .replaceAll("{{labels.viewMode}}", escapeHtml(labels.viewMode))
+    .replaceAll("{{labels.viewDiagram}}", escapeHtml(labels.viewDiagram))
+    .replaceAll("{{labels.viewGrid}}", escapeHtml(labels.viewGrid))
     .replaceAll("{{labels.openOriginal}}", escapeHtml(labels.openOriginal))
     .replace("/*{{css}}*/", () => css)
     .replace("/*{{data}}*/", () => `const DATA = ${JSON.stringify(data).replace(/</g, "\\u003c")};`)

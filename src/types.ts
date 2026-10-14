@@ -23,6 +23,10 @@ export interface ViewerLabels {
   /** `{n}` is replaced with the node count. */
   screens: string;
   sameFlow: string;
+  /** The diagram / grid switch. */
+  viewMode: string;
+  viewDiagram: string;
+  viewGrid: string;
   openOriginal: string;
   noImage: string;
   transitionOnly: string;
