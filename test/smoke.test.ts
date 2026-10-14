@@ -74,3 +74,26 @@ test("defineScenario validates steps and flows", async () => {
   const [a, b] = flow.nodes;
   assert.ok(a && b && a.x < b.x);
 });
+
+test("diff splits changes into regions and describes size changes", async () => {
+  const { findRegions, sizeNotes } = await import("../dist/index.js");
+  const width = 200;
+  const height = 300;
+  const mask = new Uint8Array(width * height);
+  const paint = (x0: number, y0: number, w: number, h: number) => {
+    for (let y = y0; y < y0 + h; y += 1) for (let x = x0; x < x0 + w; x += 1) mask[y * width + x] = 1;
+  };
+  paint(10, 10, 20, 10);   // header
+  paint(15, 24, 5, 5);     // close to the header: same region
+  paint(100, 200, 40, 30); // far below: its own region
+  const { regions, omitted } = findRegions(mask, width, height);
+  assert.equal(regions.length, 2);
+  assert.equal(omitted, 0);
+  assert.deepEqual(regions[0], { x: 8, y: 8, width: 24, height: 24 });
+  assert.ok(regions[1] && regions[1].y >= 192 && regions[1].x <= 100);
+
+  assert.deepEqual(sizeNotes({ width: 453, height: 1428 }, { width: 390, height: 1460 }, 390),
+    ["overflows the 390px viewport by 63px (horizontal scroll)", "page is 32px shorter"]);
+  assert.deepEqual(sizeNotes({ width: 390, height: 900 }, { width: 420, height: 900 }, 390),
+    ["no longer overflows the 390px viewport (was 30px wider)"]);
+});

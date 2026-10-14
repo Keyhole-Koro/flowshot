@@ -257,8 +257,15 @@ export interface DiffResult {
   sizeChanged?: boolean;
   size?: { width: number; height: number };
   baselineSize?: { width: number; height: number };
+  /** Box around every changed region. */
   bounds?: { x: number; y: number; width: number; height: number } | null;
-  /** Path of the highlight image relative to `outDir`. */
+  /** Separate changed areas in reading order; `image` is its before | after | changes crop. */
+  regions?: Array<{ x: number; y: number; width: number; height: number; image: string | null }>;
+  /** Smaller regions left out of `regions`. */
+  omittedRegions?: number;
+  /** Plain-language size changes, e.g. horizontal overflow. */
+  notes?: string[];
+  /** Path of the before | after | changes image relative to `outDir`. */
   diffImage?: string | null;
   message?: string;
 }

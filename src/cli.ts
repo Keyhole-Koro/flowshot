@@ -27,6 +27,7 @@ Usage:
                                         Crop or tile a capture into readable pieces under .inspect/
   flowshot init    [--skills-dir .claude/skills] [--force]
                                         Write a starter config and copy the bundled agent skills
+                                        (Codex: --skills-dir .agents/skills; --force refreshes skills only)
   flowshot help
 
 Options:
@@ -200,14 +201,18 @@ async function commandLint(config: Config, values: Values): Promise<void> {
   if (problems.some((problem) => problem.kind !== "unreferenced-capture")) process.exitCode = 1;
 }
 
-function describeDiff(result: DiffResult): string {
-  if (result.status === "changed") {
-    const size = result.sizeChanged && result.baselineSize && result.size ? ` (size ${result.baselineSize.width}x${result.baselineSize.height} → ${result.size.width}x${result.size.height})` : "";
-    const region = result.bounds ? `  region ${result.bounds.x},${result.bounds.y} ${result.bounds.width}x${result.bounds.height}` : "";
-    return `${formatRatio(result.ratio ?? 0)} changed${size}${region}  → ${result.diffImage ?? ""}`;
-  }
-  if (result.status === "new") return "no baseline";
-  return result.message ?? "";
+/** Lines after the path: ratio, plain-language notes, then each region. */
+function describeDiff(result: DiffResult): string[] {
+  if (result.status === "new") return ["no baseline"];
+  if (result.status !== "changed") return result.message ? [result.message] : [];
+  const lines = [`${formatRatio(result.ratio ?? 0)} of pixels changed  → ${result.diffImage ?? ""} (before | after | changes)`];
+  for (const note of result.notes ?? []) lines.push(`! ${note}`);
+  const regions = result.regions ?? [];
+  regions.forEach((region, index) => {
+    lines.push(`region ${index + 1}: ${region.x},${region.y} ${region.width}x${region.height}${region.image ? `  → ${region.image}` : ""}`);
+  });
+  if (result.omittedRegions) lines.push(`(+${result.omittedRegions} smaller regions)`);
+  return lines;
 }
 
 async function commandDiff(config: Config, values: Values): Promise<void> {
@@ -225,7 +230,8 @@ async function commandDiff(config: Config, values: Values): Promise<void> {
     captures = captures.filter((capture) => previous.has(capture.path));
   }
   const threshold = values.threshold ? Number(values.threshold) : 0.0005;
-  const results = await diffCaptures({ outDir: config.outDir, baselineDir, captures, threshold });
+  const viewportWidths = Object.fromEntries(config.viewports.map((viewport) => [viewport.name, viewport.width]));
+  const results = await diffCaptures({ outDir: config.outDir, baselineDir, captures, threshold, viewportWidths });
   const count = (status: DiffResult["status"]) => results.filter((result) => result.status === status).length;
   const summary = {
     baseline: baselineDir,
@@ -248,7 +254,9 @@ async function commandDiff(config: Config, values: Values): Promise<void> {
   }
   for (const result of results) {
     if (result.status === "same") continue;
-    console.log(`${result.status.padEnd(8)} ${result.path}  ${describeDiff(result)}`);
+    const [first = "", ...rest] = describeDiff(result);
+    console.log(`${result.status.padEnd(8)} ${result.path}  ${first}`);
+    for (const line of rest) console.log(`         ${line}`);
   }
   console.log(`\n${summary.compared} compared: ${summary.changed} changed, ${summary.same} same, ${summary.new} new${summary.errors ? `, ${summary.errors} errors` : ""}`);
 }

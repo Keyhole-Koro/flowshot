@@ -30,16 +30,21 @@ README); flowshot does not start it.
 
 3. **Diff.**
    `npx flowshot diff --only <scenario> [--json]`
-   Each changed capture reports the changed-pixel ratio, a bounding `region
-   x,y WxH`, a size change if any, and a highlight image under `.diff/`
-   (red = changed pixels over a faded copy of the current capture).
+   Each changed capture reports the changed-pixel ratio, plain-language
+   notes when its size changed (`overflows the 390px viewport by 63px`,
+   `page is 32px shorter`), and its changed regions in reading order. Images
+   under `.diff/`: `<path>` is before | after | changes for the whole page,
+   `<path minus .png>.region-<n>.png` the same three panels for one region.
+   Blue boxes mark regions; a dashed red line marks the viewport edge when
+   the page overflows.
 
 4. **Read the change, not the whole page.**
-   Captures are full-page and often thousands of pixels tall; read them in
-   pieces:
-   - `npx flowshot inspect <path> --crop x,y,w,h` around the reported region
-     (pad by ~40px). Do this for both the current capture and its
-     `.diff/<path>` twin.
+   Read each `.region-<n>.png` with your image tool: left is before, middle
+   is after, right highlights changed pixels in red. For context beyond a
+   region, captures are full-page and often thousands of pixels tall; read
+   them in pieces:
+   - `npx flowshot inspect <path> --crop x,y,w,h` around a region (pad by
+     ~40px).
    - `npx flowshot inspect <path> --tile 1200` to walk a whole page.
    Output files land in `.inspect/`; read them with your image tool.
 
@@ -49,8 +54,12 @@ README); flowshot does not start it.
      not expect → investigate before reporting.
    - Dynamic content (timestamps, generated ids, seeded emails) shows up as
      small scattered diffs; ignore those, but say so.
-   - Size change on a full-page capture means content grew or shrank — check
-     that nothing overflows or gets clipped, especially at mobile width.
+   - An `overflows the …px viewport` note is a layout bug unless the page
+     is meant to scroll sideways. Other size changes mean content grew or
+     shrank — check that nothing gets clipped, especially at mobile width.
+   - One region covering the whole page usually means everything moved
+     (content above it changed height, or the page width changed); find the
+     first real change at the top of the region instead of reading it all.
 
 6. **Close the loop.**
    `npx flowshot lint` must print `ok` (every flow node captured, nothing
