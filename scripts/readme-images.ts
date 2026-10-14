@@ -6,7 +6,7 @@
 // keeps the hero's share-link card inside a phone screen, re-capture, and let
 // `flowshot diff` find the overflow.
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -18,7 +18,6 @@ const run = promisify(execFile);
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const EXAMPLE = path.join(ROOT, "example");
 const DOCS = path.join(ROOT, "docs");
-const BROKEN = "mobile/public/01_home.png";
 
 const tmp = await mkdtemp(path.join(os.tmpdir(), "flowshot-docs-"));
 const site = path.join(tmp, "site");
@@ -102,38 +101,32 @@ try {
     { src: file("mobile/mobile-nav/02_open.png"), title: "Menu open", how: "tap ☰", height: 420 },
   ]));
 
-  // Break the mobile layout and run what an agent runs after a CSS change.
+  // Break the mobile layout and diff, as the README's opening example shows.
   const css = path.join(site, "style.css");
   await writeFile(css, (await readFile(css, "utf8")).replaceAll(" min-width: 0;", ""));
-  const transcript: [string, string][] = [];
-  const say = async (command: string, args: string[], keep?: (line: string) => boolean) => {
-    const lines = (await flowshot(args)).trimEnd().split("\n").filter((line) => !line.startsWith("baseline"));
-    transcript.push([command, (keep ? lines.filter(keep) : lines).join("\n")]);
-  };
-  await say("flowshot list --json | jq -r '.captures[].path' | grep home", ["list", "--json"]);
-  transcript[0] = [transcript[0]![0], (JSON.parse(transcript[0]![1]) as { captures: { path: string }[] }).captures.map((c) => c.path).filter((p) => p.includes("home")).join("\n")];
-  await say("flowshot run --only public --viewport mobile --no-viewer", ["run", "--only", "public", "--viewport", "mobile", "--no-viewer"],
-    (line) => line.includes("01_home") || line.includes("captured"));
-  await say("flowshot diff --only public", ["diff", "--only", "public"]);
-  await say("flowshot inspect .diff/mobile/public/01_home.png --crop 0,430,453,400", ["inspect", ".diff/mobile/public/01_home.png", "--crop", "0,430,453,400"]);
-  console.log(transcript.map(([command, output]) => `$ ${command}\n${output}`).join("\n"));
+  await flowshot(["run", "--only", "public", "--viewport", "mobile", "--no-viewer", "--quiet"]);
+  console.log((await flowshot(["diff", "--only", "public"])).split("\n").filter((line) => !line.startsWith("baseline")).join("\n"));
 
-  const terminal = `<pre style="margin:0;width:760px;padding:20px;border-radius:10px;background:#16152a;color:#d9d6f2;font:13px/1.55 ui-monospace,monospace;white-space:pre-wrap">${transcript
-    .map(([command, output]) => `<span style="color:#9d8cff">$</span> <b style="color:#fff">${escape(command)}</b>\n${escape(output)
-      .replace(/^changed/m, '<span style="color:#ff8a7a">changed</span>')}`)
-    .join("\n\n")}</pre>`;
-  await render(browser, "agent.png", terminal + strip([
-    { src: file(".inspect/.diff__mobile__public__01_home__crop_0_430_453x400.png"), title: "what the agent reads", how: ".inspect/ crop of .diff/", width: 340, height: 300 },
-  ]));
+  // A recorded Claude Code session (docs/agent-session.json: prompt, tool
+  // calls and replies from `claude -p --output-format stream-json`) rendered
+  // as a terminal.
+  const session = JSON.parse(await readFile(path.join(DOCS, "agent-session.json"), "utf8")) as { kind: string; name?: string; text: string }[];
+  const inline = (text: string) => escape(text)
+    .replace(/\*\*(.+?)\*\*/g, '<b style="color:#fff">$1</b>')
+    .replace(/`([^`]+)`/g, '<span style="color:#f5c27a">$1</span>');
+  const lines = session.map((entry) => {
+    if (entry.kind === "prompt") return `<div style="color:#fff;margin-bottom:14px"><span style="color:#9d8cff">&gt;</span> ${escape(entry.text)}</div>`;
+    if (entry.kind === "tool") {
+      const label = entry.name === "Skill" ? `Skill(${entry.text})` : entry.name === "Read" ? `Read(${entry.text})` : `Bash(${entry.text})`;
+      return `<div style="margin:6px 0"><span style="color:#5fd38d">⏺</span> <b style="color:#fff">${escape(label)}</b></div>`;
+    }
+    if (entry.kind === "meta") return `<div style="margin-top:14px;color:#8b88a8">${escape(entry.text)}</div>`;
+    return `<div style="margin:10px 0;white-space:pre-wrap"><span style="color:#fff">⏺</span> ${inline(entry.text)}</div>`;
+  });
+  await render(browser, "agent.png", `<div style="width:860px;padding:20px 22px;border-radius:10px;background:#16152a;color:#d9d6f2;font:13px/1.55 ui-monospace,monospace">${lines.join("")}</div>`);
 
-  // Before / current / diff, with the phone's edge marked.
-  const edge = `<div style="position:absolute;top:0;bottom:0;left:390px;right:0;background:rgb(180 35 24 / 0.08);border-left:2px dashed #b42318"></div>
-    <span style="position:absolute;bottom:8px;left:396px;font-size:12px;color:#b42318;font-weight:600">390px</span>`;
-  await render(browser, "diff.png", strip([
-    { src: file(path.join(".previous", BROKEN)), title: ".previous/", how: "before", width: 390, height: 400, top: 430 },
-    { src: file(BROKEN), title: "current", how: "453px wide on a 390px phone", width: 453, height: 400, top: 430, extra: edge },
-    { src: file(path.join(".diff", BROKEN)), title: ".diff/", how: "changed pixels", width: 453, height: 400, top: 430 },
-  ]));
+  // The diff image is flowshot's own output: the region crop `diff` wrote.
+  await copyFile(path.join(outDir, ".diff/mobile/public/01_home.region-1.png"), path.join(DOCS, "diff.png"));
   console.log("wrote docs/*.png");
 } finally {
   await browser.close();

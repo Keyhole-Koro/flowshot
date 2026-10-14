@@ -1,0 +1,48 @@
+[
+  {
+    "kind": "prompt",
+    "text": "I tidied up the CSS in site/style.css. Does the home page still look right on mobile?"
+  },
+  {
+    "kind": "tool",
+    "name": "Skill",
+    "text": "flowshot-verify"
+  },
+  {
+    "kind": "tool",
+    "name": "Bash",
+    "text": "npx flowshot list --json; git diff site/style.css"
+  },
+  {
+    "kind": "text",
+    "text": "Those `min-width: 0` removals look risky for overflow. Re-capturing the home page scenarios on mobile."
+  },
+  {
+    "kind": "tool",
+    "name": "Bash",
+    "text": "npx flowshot run --only public,mobile-nav --viewport mobile --no-viewer && npx flowshot diff --only public,mobile-nav"
+  },
+  {
+    "kind": "tool",
+    "name": "Bash",
+    "text": "npx flowshot inspect mobile/public/01_home.png --tile 1200; npx flowshot lint"
+  },
+  {
+    "kind": "tool",
+    "name": "Read",
+    "text": "output/captures/.inspect/mobile__public__01_home__tile01_y0.png"
+  },
+  {
+    "kind": "tool",
+    "name": "Read",
+    "text": "output/captures/.diff/mobile/mobile-nav/01_closed.region-1.png"
+  },
+  {
+    "kind": "text",
+    "text": "No, the home page is now broken on mobile. The page is 453px wide inside a 390px screen, so it scrolls sideways by 63px.\n\n**What I saw** (I re-captured the home page and the mobile nav at 390px and compared them with the previous captures):\n- **Before:** the share link `paperkite.example/h/7Qx2-…` was cut off with an ellipsis, and the file card fit inside the screen.\n- **After:** the full link `paperkite.example/h/7Qx2-north-studio` is shown. That widens the file card and the whole hero section past the screen edge, so the \"Approved\"/\"Viewed\" tags and the Copy button sit at the right edge. The header's white background stops at 390px while the content keeps going.\n- The heading and intro text now wrap more widely, so the page is 32px shorter. The mobile nav screens (menu open and closed) have the same problem because they're on the same page.\n\n**Cause:** the tidy-up removed two `min-width: 0` rules in `site/style.css`, and they weren't redundant:\n- `.hero > * { min-width: 0; }` (line 38, now an empty rule). Without it, the hero's grid column can't get narrower than its widest content.\n- `min-width: 0` on `.link-row code` (line 48). Without it, the link won't shrink inside its row, so `text-overflow: ellipsis` never applies and the full URL sets the width.\n\n**Fix:** put back both `min-width: 0` declarations, and keep the empty `.hero > * { }` rule only if you restore it. I haven't edited the file; I can make the change and re-check the captures if you'd like.\n\nI didn't re-check the PC screens. The pricing and signup screens on mobile didn't change."
+  },
+  {
+    "kind": "meta",
+    "text": "8 turns · 37s"
+  }
+]
