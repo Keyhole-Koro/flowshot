@@ -3,20 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Example app</title>
+  <title>Paperkite — send big files to clients</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top"><strong>Example</strong><nav><a href="/">Home</a><a href="/pricing.html">Pricing</a><a href="/signup.html">Sign up</a></nav></header>
+  <header class="top">
+    <a class="logo" href="/"><svg viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#5b4bdb"/><path d="M7 14.5 20 8l-3.5 13-3.5-4.5z" fill="#fff"/><path d="M13 16.5 20 8" stroke="#5b4bdb" stroke-width="1.5"/></svg>Paperkite</a>
+    <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false">☰</button>
+    <nav><a href="/" aria-current="page">Product</a><a href="/pricing.html">Pricing</a><a href="/signup.html">Log in</a><a class="button" href="/signup.html?plan=pro">Start free</a></nav>
+  </header>
   <main>
-    <h1>Share files with people who do not have an account</h1>
-    <p>This is a tiny static site that flowshot's example scenario captures on two viewports.</p>
-    <a class="button" href="/pricing.html">See pricing</a>
+    <section class="hero">
+      <div>
+        <span class="eyebrow">For studios and freelancers</span>
+        <h1>Send big files to clients without the back-and-forth</h1>
+        <p class="lead">Drop in a folder, get one link. Clients preview, approve and download — no account, no zip, no “did you get it?”.</p>
+        <div class="actions"><a class="button" href="/pricing.html">See pricing</a><a class="button ghost" href="/signup.html?plan=free">Try it free</a></div>
+      </div>
+      <div class="mock" aria-label="Example handoff">
+        <div class="file"><i>MP4</i><div><b>brand-film-final.mp4</b><small>2.4 GB</small></div><span class="tag">Approved</span></div>
+        <div class="file"><i>PDF</i><div><b>guidelines-v3.pdf</b><small>18 MB</small></div><span class="tag">Viewed</span></div>
+        <div class="file"><i>ZIP</i><div><b>logo-pack.zip</b><small>64 MB</small></div></div>
+        <div class="link-row"><code>paperkite.example/h/7Qx2-north-studio</code><span class="button">Copy</span></div>
+      </div>
+    </section>
     <section class="cards">
-      <article><h2>Send</h2><p>Upload once, share a link.</p></article>
-      <article><h2>Receive</h2><p>Ask for files without email attachments.</p></article>
-      <article><h2>Audit</h2><p>Every view is logged.</p></article>
+      <article><span class="icon">↗</span><h2>Send</h2><p>Upload once and share a single link that previews in the browser.</p></article>
+      <article><span class="icon">↙</span><h2>Receive</h2><p>Ask clients for raw footage with an upload link — no email attachments.</p></article>
+      <article><span class="icon">✓</span><h2>Approve</h2><p>See who viewed, downloaded and signed off, file by file.</p></article>
     </section>
   </main>
+  <script src="menu.js"></script>
 </body>
 </html>

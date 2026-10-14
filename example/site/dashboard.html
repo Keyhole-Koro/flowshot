@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Handoffs — Paperkite</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="logo" href="/"><svg viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#5b4bdb"/><path d="M7 14.5 20 8l-3.5 13-3.5-4.5z" fill="#fff"/><path d="M13 16.5 20 8" stroke="#5b4bdb" stroke-width="1.5"/></svg>Paperkite</a>
+    <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false">☰</button>
+    <nav><a href="/dashboard.html" aria-current="page">Handoffs</a><a href="/pricing.html">Billing</a><a href="/">Log out</a></nav>
+  </header>
+  <main>
+    <div class="dash-head">
+      <div><h1>Handoffs</h1><p class="muted" data-testid="usage">&nbsp;</p></div>
+      <button class="button" type="button" data-testid="new-handoff">+ New handoff</button>
+    </div>
+    <p class="banner" data-testid="quota-banner" hidden>Your Free plan is almost full: <strong id="quota-text"></strong>. New uploads will fail once it is. <a href="/pricing.html">Upgrade to Pro</a></p>
+    <ul class="handoffs" data-testid="loading" aria-busy="true">
+      <li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li>
+    </ul>
+    <ul class="handoffs" data-testid="handoff-list" hidden></ul>
+    <section class="state" data-testid="empty" hidden>
+      <div class="icon">↗</div>
+      <h2>No handoffs yet</h2>
+      <p>Drop in the files for your first client and send them one link.</p>
+      <button class="button" type="button" data-open-dialog>Create your first handoff</button>
+    </section>
+    <section class="state" data-testid="load-error" hidden>
+      <div class="icon err">!</div>
+      <h2>We couldn’t load your handoffs</h2>
+      <p>Your files are safe. This is on our side — try again in a moment.</p>
+      <button class="button ghost" type="button" onclick="location.reload()">Try again</button>
+    </section>
+  </main>
+  <dialog data-testid="new-dialog">
+    <form method="dialog">
+      <h2>New handoff</h2>
+      <label>Name <input name="name" value="Brand film — v2"></label>
+      <label>Client <input name="client" value="North Studio"></label>
+      <div class="dropzone">Drop files here<br><small>or click to choose · up to 50 GB on Pro</small></div>
+      <div class="actions"><button class="button ghost" value="cancel">Cancel</button><button class="button" value="ok">Create link</button></div>
+    </form>
+  </dialog>
+  <script src="menu.js"></script>
+  <script>
+    const show = (id, visible = true) => { document.querySelector(`[data-testid=${id}]`).hidden = !visible; };
+    const dialog = document.querySelector("dialog");
+    document.querySelectorAll("[data-testid=new-handoff], [data-open-dialog]").forEach((button) => button.addEventListener("click", () => dialog.showModal()));
+    fetch("/api/handoffs").then(async (response) => {
+      if (response.status === 401) return location.replace("/signup.html");
+      show("loading", false);
+      if (!response.ok) return show("load-error");
+      const account = await response.json();
+      document.querySelector("[data-testid=usage]").textContent =
+        `${account.plan === "pro" ? "Pro" : "Free"} plan · ${account.usedGb} of ${account.limitGb} GB used`;
+      if (account.usedGb / account.limitGb >= 0.9) {
+        document.getElementById("quota-text").textContent = `${account.usedGb} of ${account.limitGb} GB used`;
+        show("quota-banner");
+      }
+      if (account.handoffs.length === 0) return show("empty");
+      const list = document.querySelector("[data-testid=handoff-list]");
+      list.innerHTML = account.handoffs.map((handoff) => `
+        <li><div><b>${handoff.name}</b><small>${handoff.client} · ${handoff.files} files · ${handoff.size}</small></div>
+        <span class="status s-${handoff.status.split(" ")[0].toLowerCase()}">${handoff.status}</span></li>`).join("");
+      show("handoff-list");
+    }).catch(() => { show("loading", false); show("load-error"); });
+  </script>
+</body>
+</html>

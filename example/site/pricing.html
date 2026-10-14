@@ -3,17 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pricing</title>
+  <title>Pricing — Paperkite</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top"><strong>Example</strong><nav><a href="/">Home</a><a href="/pricing.html">Pricing</a><a href="/signup.html">Sign up</a></nav></header>
+  <header class="top">
+    <a class="logo" href="/"><svg viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#5b4bdb"/><path d="M7 14.5 20 8l-3.5 13-3.5-4.5z" fill="#fff"/><path d="M13 16.5 20 8" stroke="#5b4bdb" stroke-width="1.5"/></svg>Paperkite</a>
+    <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false">☰</button>
+    <nav><a href="/">Product</a><a href="/pricing.html" aria-current="page">Pricing</a><a href="/signup.html">Log in</a><a class="button" href="/signup.html?plan=pro">Start free</a></nav>
+  </header>
   <main>
-    <h1>Pricing</h1>
-    <section class="cards">
-      <article><h2>Starter</h2><p class="price">$10<span>/mo</span></p><p>5 GB</p><a class="button" href="/signup.html?plan=starter">Choose</a></article>
-      <article class="featured"><h2>Standard</h2><p class="price">$40<span>/mo</span></p><p>50 GB</p><a class="button" href="/signup.html?plan=standard">Choose</a></article>
+    <h1>Simple pricing</h1>
+    <p class="lead">Start free. Upgrade when your files get bigger than your inbox.</p>
+    <section class="plans">
+      <article class="plan"><h2>Free</h2><p class="price">$0<span> /month</span></p><ul><li>2 GB per handoff</li><li>Links last 7 days</li><li>Download tracking</li></ul><a class="button ghost" href="/signup.html?plan=free">Start free</a></article>
+      <article class="plan featured"><span class="badge">Most popular</span><h2>Pro</h2><p class="price">$12<span> /month</span></p><ul><li>50 GB per handoff</li><li>Links that never expire</li><li>Client approvals</li><li>Your logo on every link</li></ul><a class="button" href="/signup.html?plan=pro">Choose Pro</a></article>
+      <article class="plan"><h2>Team</h2><p class="price">$39<span> /month</span></p><ul><li>Everything in Pro</li><li>5 seats</li><li>Shared client folders</li></ul><a class="button ghost" href="/signup.html?plan=team">Choose Team</a></article>
     </section>
   </main>
+  <script src="menu.js"></script>
 </body>
 </html>

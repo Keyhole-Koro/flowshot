@@ -9,6 +9,6 @@
     "lib": ["ES2022"],
     "types": ["node"]
   },
-  "include": ["example/**/*.ts", "test/**/*.ts"],
+  "include": ["example/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
   "exclude": []
 }

@@ -48,7 +48,8 @@
     "prepare": "npm run build",
     "test": "npm run build && npm run typecheck && node --test test/*.test.ts",
     "example": "node example/serve.ts 4173",
-    "example:capture": "cd example && node ../bin/flowshot.js run"
+    "example:capture": "cd example && node ../bin/flowshot.js run",
+    "docs:images": "npm run build && node scripts/readme-images.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -26,17 +26,19 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
     const first = await flowshot(["run", "--json"], env);
     const summary = JSON.parse(first.stdout);
     assert.equal(summary.failures.length, 0, JSON.stringify(summary.failures));
-    // public: 5 images × 2 viewports; mobile-nav: 1 image × 1 viewport
-    assert.equal(summary.captured, 11);
+    // public: 6 images × 2 viewports; dashboard: 6 × 2; mobile-nav: 2 × 1
+    assert.equal(summary.captured, 26);
     assert.equal(summary.missing.length, 0);
 
     const manifest = JSON.parse(await readFile(path.join(outDir, "manifest.json"), "utf8"));
-    assert.equal(manifest.captures.length, 11);
+    assert.equal(manifest.captures.length, 26);
     assert.ok(manifest.captures.every((capture: { width: number; height: number }) => capture.width > 0 && capture.height > 0));
     assert.ok(manifest.captures.some((capture: { path: string }) => capture.path === "mobile/signup/02_email-taken.png"));
+    assert.ok(manifest.captures.some((capture: { path: string }) => capture.path === "mobile/dashboard/05_error.png"));
     const html = await readFile(path.join(outDir, "index.html"), "utf8");
     assert.match(html, /Email taken/);
     assert.match(html, /flowshot demo/);
+    assert.match(html, /data-view="grid"/);
 
     const lint = JSON.parse((await flowshot(["lint", "--json"], env)).stdout);
     assert.equal(lint.ok, true, JSON.stringify(lint.problems));
@@ -44,7 +46,7 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
     // Second run: everything should be unchanged.
     await flowshot(["run", "--only", "public", "--viewport", "mobile", "--no-viewer", "--quiet"], env);
     const diff = JSON.parse((await flowshot(["diff", "--json"], env)).stdout);
-    assert.equal(diff.compared, 5);
+    assert.equal(diff.compared, 6);
     assert.equal(diff.changed, 0, JSON.stringify(diff.results.filter((r: { status: string }) => r.status !== "same")));
 
     const inspect = JSON.parse((await flowshot(["inspect", "public/01_home", "--viewport", "mobile", "--tile", "400", "--json"], env)).stdout);
@@ -52,7 +54,7 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
     assert.ok(inspect.pieces.length >= 2);
 
     const list = JSON.parse((await flowshot(["list", "--json"], env)).stdout);
-    assert.deepEqual(list.scenarios.map((scenario: { id: string }) => scenario.id), ["public", "mobile-nav"]);
+    assert.deepEqual(list.scenarios.map((scenario: { id: string }) => scenario.id), ["public", "dashboard", "mobile-nav"]);
   } finally {
     server.close();
     await rm(outDir, { recursive: true, force: true });

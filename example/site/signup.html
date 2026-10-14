@@ -3,30 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign up</title>
+  <title>Sign up — Paperkite</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top"><strong>Example</strong><nav><a href="/">Home</a><a href="/pricing.html">Pricing</a><a href="/signup.html">Sign up</a></nav></header>
+  <header class="top">
+    <a class="logo" href="/"><svg viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#5b4bdb"/><path d="M7 14.5 20 8l-3.5 13-3.5-4.5z" fill="#fff"/><path d="M13 16.5 20 8" stroke="#5b4bdb" stroke-width="1.5"/></svg>Paperkite</a>
+    <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false">☰</button>
+    <nav><a href="/">Product</a><a href="/pricing.html">Pricing</a><a href="/signup.html">Log in</a><a class="button" href="/signup.html?plan=pro">Start free</a></nav>
+  </header>
   <main>
-    <h1>Create your account</h1>
-    <form id="signup" data-testid="signup-form">
-      <label>Email <input type="email" name="email" required></label>
-      <label>Password <input type="password" name="password" required minlength="8"></label>
-      <button class="button" type="submit" data-testid="signup-submit">Sign up</button>
-      <p class="error" data-testid="signup-error" hidden>That email is already registered.</p>
-    </form>
-    <section class="done" data-testid="signup-done" hidden><h2>Check your inbox</h2><p>We sent a confirmation link.</p></section>
+    <section class="auth">
+      <aside class="auth-side">
+        <h2>Your first handoff in two minutes</h2>
+        <p>14 days of Pro, then pick a plan or stay on Free.</p>
+        <ul><li>No credit card needed</li><li>Cancel any time</li><li>Files stay yours</li></ul>
+      </aside>
+      <div class="auth-main">
+        <div data-testid="signup-form-wrap">
+          <h1>Create your account</h1>
+          <span class="plan-pill" id="plan">Pro plan</span>
+          <form id="signup" data-testid="signup-form" novalidate>
+            <p class="alert" role="alert" data-testid="signup-error" hidden>⚠ That email already has an account. <a href="/signup.html">Log in instead</a></p>
+            <label>Work email <input type="email" name="email" autocomplete="email" placeholder="you@studio.com"></label>
+            <label>Password <input type="password" name="password" autocomplete="new-password">
+              <span class="hint" data-testid="password-hint">At least 8 characters.</span>
+              <span class="field-error" data-testid="password-error" hidden>Too short — use at least 8 characters.</span>
+            </label>
+            <button class="button" type="submit" data-testid="signup-submit">Sign up</button>
+          </form>
+        </div>
+        <section class="done" data-testid="signup-done" hidden>
+          <div class="check">✓</div>
+          <h1>Check your inbox</h1>
+          <p>We sent a confirmation link to <strong id="sent-to"></strong>.<br>It expires in 24 hours.</p>
+          <a class="button ghost" href="/signup.html">Use a different email</a>
+        </section>
+      </div>
+    </section>
   </main>
+  <script src="menu.js"></script>
   <script>
+    const plan = new URLSearchParams(location.search).get("plan") ?? "pro";
+    document.getElementById("plan").textContent = plan[0].toUpperCase() + plan.slice(1) + " plan";
     document.getElementById("signup").addEventListener("submit", (event) => {
       event.preventDefault();
-      const email = new FormData(event.target).get("email");
+      const data = new FormData(event.target);
+      const email = String(data.get("email"));
+      const password = String(data.get("password"));
+      const passwordInput = event.target.elements.password;
+      const tooShort = password.length < 8;
+      document.querySelector("[data-testid=password-error]").hidden = !tooShort;
+      document.querySelector("[data-testid=password-hint]").hidden = tooShort;
+      passwordInput.setAttribute("aria-invalid", String(tooShort));
+      if (tooShort) return;
       if (email === "taken@example.com") {
         document.querySelector("[data-testid=signup-error]").hidden = false;
+        event.target.elements.email.setAttribute("aria-invalid", "true");
         return;
       }
-      event.target.hidden = true;
+      document.getElementById("sent-to").textContent = email;
+      document.querySelector("[data-testid=signup-form-wrap]").hidden = true;
       document.querySelector("[data-testid=signup-done]").hidden = false;
     });
   </script>
