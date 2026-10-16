@@ -388,7 +388,9 @@ npx flowshot viewer         # rebuild index.html from manifest.json only
 npx flowshot init           # starter config + copy the bundled agent skills into .claude/skills/ (--skills-dir for others)
 ```
 
-Open `output/captures/index.html` in a browser. `npx flowshot help` lists every option.
+Open `output/captures/index.html` in a browser. The viewer keeps the selected
+flow, screen, viewport, and view mode in the URL hash, so reloading or sharing
+that URL opens the same state. `npx flowshot help` lists every option.
 
 A runnable example lives in [`example/`](example/): `npm run example` serves
 a static site on :4173, `npm run example:capture` captures it.

@@ -1,16 +1,46 @@
 // Browser-side viewer, compiled by tsconfig.client.json into a plain script
 // and inlined into index.html after `const DATA = …` (see build.ts).
 
-const firstFlow = DATA.flows[0];
-if (!firstFlow || !firstFlow.nodes[0] || !DATA.viewports[0]) throw new Error("viewer: no flows or viewports");
+const initialFlow = DATA.flows[0];
+const initialNode = initialFlow?.nodes[0];
+const initialViewport = DATA.viewports[0];
+if (!initialFlow || !initialNode || !initialViewport) throw new Error("viewer: no flows or viewports");
+const firstFlow: ViewerFlow = initialFlow;
+const firstNode: ViewerFlowNode = initialNode;
+const firstViewport = initialViewport;
 
-const state = {
-  flow: firstFlow.id,
-  viewport: DATA.viewports[0].name,
-  node: firstFlow.nodes[0].id,
-  // "#grid" in the URL opens the grid, so it can be linked to.
-  view: location.hash === "#grid" ? "grid" : "diagram",
-};
+type ViewMode = "diagram" | "grid";
+
+interface ViewerState {
+  flow: string;
+  viewport: string;
+  node: string;
+  view: ViewMode;
+}
+
+function flowViewports(flow: ViewerFlow): string[] {
+  return flow.viewports || DATA.viewports.map((viewport) => viewport.name);
+}
+
+function stateFromHash(): ViewerState {
+  // Keep the old `#grid` link working while moving to structured hash params.
+  const params = new URLSearchParams(location.hash === "#grid" ? "view=grid" : location.hash.slice(1));
+  const flow = DATA.flows.find((item) => item.id === params.get("flow")) ?? firstFlow;
+  const node = flow.nodes.find((item) => item.id === params.get("node")) ?? flow.nodes[0];
+  const allowedViewports = flowViewports(flow);
+  const requestedViewport = params.get("viewport");
+  const viewport = requestedViewport && allowedViewports.includes(requestedViewport)
+    ? requestedViewport
+    : (allowedViewports[0] ?? firstViewport.name);
+  return {
+    flow: flow.id,
+    viewport,
+    node: node?.id ?? firstNode.id,
+    view: params.get("view") === "grid" ? "grid" : "diagram",
+  };
+}
+
+const state = stateFromHash();
 
 const label = (key: string): string => DATA.labels[key] ?? key;
 
@@ -28,8 +58,14 @@ const currentNode = (): ViewerFlowNode => {
 const imagePath = (node: ViewerFlowNode, viewport = state.viewport): string | null => (node.image ? `${viewport}/${node.image}` : null);
 const hasImage = (node: ViewerFlowNode): boolean => Boolean(node.image) && captureSet.has(imagePath(node) ?? "");
 
-function flowViewports(flow: ViewerFlow): string[] {
-  return flow.viewports || DATA.viewports.map((viewport) => viewport.name);
+function syncHash(): void {
+  const params = new URLSearchParams({
+    flow: state.flow,
+    node: state.node,
+    viewport: state.viewport,
+    view: state.view,
+  });
+  history.replaceState(null, "", `${location.pathname}${location.search}#${params}`);
 }
 
 function renderNavigation(): void {
@@ -47,6 +83,7 @@ function renderNavigation(): void {
       const allowed = flowViewports(flow);
       if (!allowed.includes(state.viewport)) state.viewport = allowed[0] ?? state.viewport;
       render();
+      syncHash();
     };
     return button;
   });
@@ -111,6 +148,7 @@ function selectNode(id: string): void {
   state.node = id;
   renderDiagram();
   renderDetail();
+  syncHash();
 }
 
 function renderMetadata(node: ViewerFlowNode, image: string | null): void {
@@ -187,8 +225,8 @@ function renderDetail(): void {
 
 function setView(view: string): void {
   state.view = view === "grid" ? "grid" : "diagram";
-  history.replaceState(null, "", state.view === "grid" ? "#grid" : location.pathname + location.search);
   render();
+  syncHash();
 }
 
 // Every captured screen of the flow side by side, cropped to the first viewport
@@ -266,6 +304,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-viewport]").forEach((button)
   button.onclick = () => {
     state.viewport = button.dataset.viewport ?? state.viewport;
     render();
+    syncHash();
   };
 });
 document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
@@ -274,4 +313,10 @@ document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => 
 window.addEventListener("resize", () => {
   if (state.view === "diagram") renderDiagram();
 });
+window.addEventListener("hashchange", () => {
+  Object.assign(state, stateFromHash());
+  render();
+  syncHash();
+});
 render();
+syncHash();

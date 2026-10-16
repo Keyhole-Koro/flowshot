@@ -6,7 +6,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { chromium } from "playwright";
 import { serveExample } from "../example/serve.ts";
 
 const run = promisify(execFile);
@@ -39,6 +40,27 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
     assert.match(html, /Email taken/);
     assert.match(html, /flowshot demo/);
     assert.match(html, /data-view="grid"/);
+
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      const viewerUrl = pathToFileURL(path.join(outDir, "index.html"));
+      viewerUrl.hash = "flow=dashboard&node=error&viewport=mobile&view=grid";
+      await page.goto(viewerUrl.href);
+      await assert.doesNotReject(page.locator("#grid-view").waitFor({ state: "visible" }));
+      assert.equal(await page.locator("#flow-title").textContent(), "Dashboard states");
+      assert.equal(await page.locator('[data-viewport="mobile"]').getAttribute("aria-pressed"), "true");
+
+      await page.locator(".flow-button").filter({ hasText: "Public pages" }).click();
+      assert.equal(new URL(page.url()).hash, "#flow=public&node=home&viewport=mobile&view=grid");
+      await page.locator(".card").filter({ hasText: "Email taken" }).click();
+      assert.equal(new URL(page.url()).hash, "#flow=public&node=taken&viewport=mobile&view=diagram");
+      await page.reload();
+      assert.equal(await page.locator("#node-title").textContent(), "Email taken");
+      assert.equal(await page.locator("#image-path").textContent(), "mobile/signup/02_email-taken.png");
+    } finally {
+      await browser.close();
+    }
 
     const lint = JSON.parse((await flowshot(["lint", "--json"], env)).stdout);
     assert.equal(lint.ok, true, JSON.stringify(lint.problems));
