@@ -5,13 +5,30 @@
 // changed in the last run?". `--against <dir>` compares with any other tree
 // with the same layout (e.g. captures from another branch).
 
-import { access, mkdir, readdir, rm } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { crop, readPng, writePng } from "./png.js";
-import type { CaptureEntry, DiffResult, RgbaImage } from "./types.js";
+import type { CaptureEntry, DiffReport, DiffResult, RgbaImage } from "./types.js";
 
 export const PREVIOUS_DIR = ".previous";
 export const DIFF_DIR = ".diff";
+export const DIFF_REPORT_FILE = "results.json";
+
+export async function readDiffReport(outDir: string): Promise<DiffReport | null> {
+  try {
+    return JSON.parse(await readFile(path.join(outDir, DIFF_DIR, DIFF_REPORT_FILE), "utf8")) as DiffReport;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+export async function writeDiffReport(outDir: string, report: DiffReport): Promise<string> {
+  const file = path.join(outDir, DIFF_DIR, DIFF_REPORT_FILE);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(report, null, 2) + "\n", "utf8");
+  return file;
+}
 
 async function exists(file: string): Promise<boolean> {
   try {

@@ -65,11 +65,55 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
     const lint = JSON.parse((await flowshot(["lint", "--json"], env)).stdout);
     assert.equal(lint.ok, true, JSON.stringify(lint.problems));
 
-    // Second run: everything should be unchanged.
+    // Make the saved baseline visibly different, then recapture. The diff
+    // command should persist its report and rebuild the viewer around it.
+    const { readPng, writePng } = await import("../dist/index.js");
+    const changedFile = path.join(outDir, "mobile/public/01_home.png");
+    const changedImage = await readPng(changedFile);
+    for (let y = 0; y < 60; y += 1) {
+      for (let x = 0; x < 60; x += 1) {
+        const index = (y * changedImage.width + x) * 4;
+        changedImage.data[index] = 255;
+        changedImage.data[index + 1] = 0;
+        changedImage.data[index + 2] = 255;
+        changedImage.data[index + 3] = 255;
+      }
+    }
+    await writePng(changedFile, changedImage);
     await flowshot(["run", "--only", "public", "--viewport", "mobile", "--no-viewer", "--quiet"], env);
     const diff = JSON.parse((await flowshot(["diff", "--json"], env)).stdout);
     assert.equal(diff.compared, 6);
-    assert.equal(diff.changed, 0, JSON.stringify(diff.results.filter((r: { status: string }) => r.status !== "same")));
+    assert.equal(diff.changed, 1, JSON.stringify(diff.results.filter((r: { status: string }) => r.status !== "same")));
+    assert.equal(diff.results.find((result: { path: string }) => result.path === "mobile/public/01_home.png")?.status, "changed");
+    const report = JSON.parse(await readFile(path.join(outDir, ".diff/results.json"), "utf8"));
+    const updatedManifest = JSON.parse(await readFile(path.join(outDir, "manifest.json"), "utf8"));
+    assert.equal(report.manifestGeneratedAt, updatedManifest.generatedAt);
+
+    const reviewBrowser = await chromium.launch({ headless: true });
+    try {
+      const page = await reviewBrowser.newPage();
+      const viewerUrl = pathToFileURL(path.join(outDir, "index.html"));
+      viewerUrl.hash = "flow=public&node=home&viewport=mobile&view=diagram&image=diff&filter=changed";
+      await page.goto(viewerUrl.href);
+      await assert.doesNotReject(page.locator("#review-bar").waitFor({ state: "visible" }));
+      assert.match(await page.locator("#image-path").innerText(), /^\.diff\/mobile\/public\/01_home\.png$/);
+      assert.equal(await page.locator(".flow-button .is-changed").innerText(), "1 changed");
+
+      await page.getByRole("button", { name: "Compare viewports" }).click();
+      assert.equal(await page.locator(".compare-panel").count(), 2);
+      assert.match(new URL(page.url()).hash, /view=compare/);
+
+      await page.locator("#changed-only").click();
+      await page.locator("#search-input").fill("Email taken");
+      await page.locator(".search-result").filter({ hasText: "Email taken" }).click();
+      assert.equal(await page.locator("#node-title").innerText(), "Email taken");
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await page.locator("#node-title").innerText(), "Password too short");
+      await page.locator("#copy-link").click();
+      assert.equal(await page.locator("#copy-link").innerText(), "Copied");
+    } finally {
+      await reviewBrowser.close();
+    }
 
     const inspect = JSON.parse((await flowshot(["inspect", "public/01_home", "--viewport", "mobile", "--tile", "400", "--json"], env)).stdout);
     assert.equal(inspect.width, 390);

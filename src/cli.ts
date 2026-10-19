@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadConfig, parseConcurrency } from "./config.js";
-import { DIFF_DIR, PREVIOUS_DIR, diffCaptures, listPngs, tile } from "./diff.js";
+import { DIFF_DIR, PREVIOUS_DIR, diffCaptures, listPngs, tile, writeDiffReport } from "./diff.js";
 import { MANIFEST_FILE, readManifest } from "./manifest.js";
 import { crop, readPng, writePng } from "./png.js";
 import { runScenarios } from "./runner.js";
@@ -215,7 +215,7 @@ function describeDiff(result: DiffResult): string[] {
   return lines;
 }
 
-async function commandDiff(config: Config, values: Values): Promise<void> {
+async function commandDiff(config: Config, values: Values, log: Logger): Promise<void> {
   const manifest = await readManifest(config.outDir);
   if (!manifest) throw new Error(`no ${MANIFEST_FILE} in ${config.outDir}; run \`flowshot run\` first`);
   const baselineDir = values.against ? path.resolve(config.rootDir, values.against) : path.join(config.outDir, PREVIOUS_DIR);
@@ -243,6 +243,19 @@ async function commandDiff(config: Config, values: Values): Promise<void> {
     diffDir: path.join(config.outDir, DIFF_DIR),
     results,
   };
+  await writeDiffReport(config.outDir, {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    manifestGeneratedAt: manifest.generatedAt,
+    baseline: baselineDir,
+    results,
+  });
+  try {
+    const scenarios = await loadScenarios(config);
+    await buildViewer({ scenarios, config });
+  } catch (error) {
+    log.warn(`diff saved, but the viewer could not be rebuilt: ${error instanceof Error ? error.message : String(error)}`);
+  }
   if (values.json) {
     console.log(JSON.stringify(summary, null, 2));
     return;
@@ -404,7 +417,7 @@ export async function main(argv: string[]): Promise<void> {
     case "lint":
       return commandLint(config, values);
     case "diff":
-      return commandDiff(config, values);
+      return commandDiff(config, values, log);
     case "inspect":
       return commandInspect(config, values, positionals);
     case "init":

@@ -13,6 +13,9 @@
     <aside class="sidebar">
       <h1 class="brand">{{title}}</h1>
       <p class="sub">{{subtitle}}</p>
+      <label class="search-box"><span class="sr-only">{{labels.searchPlaceholder}}</span><input id="search-input" type="search" placeholder="{{labels.searchPlaceholder}}" autocomplete="off"></label>
+      <div class="health-summary" id="health-summary"></div>
+      <nav class="search-results" id="search-results" aria-label="{{labels.searchPlaceholder}}" hidden></nav>
       <nav class="flow-list" aria-label="{{labels.flows}}"></nav>
       <p class="generated-at">{{generatedAt}}</p>
     </aside>
@@ -23,10 +26,19 @@
           <p class="description" id="flow-description"></p>
         </div>
         <div class="toggles">
-          <div class="toggle" role="group" aria-label="{{labels.viewMode}}"><button type="button" data-view="diagram" aria-pressed="true">{{labels.viewDiagram}}</button><button type="button" data-view="grid" aria-pressed="false">{{labels.viewGrid}}</button></div>
+          <button class="utility-button" type="button" id="copy-link">{{labels.copyLink}}</button>
+          <div class="toggle" role="group" aria-label="{{labels.viewMode}}"><button type="button" data-view="diagram" aria-pressed="true">{{labels.viewDiagram}}</button><button type="button" data-view="grid" aria-pressed="false">{{labels.viewGrid}}</button><button type="button" data-view="compare" aria-pressed="false">{{labels.viewCompare}}</button></div>
           <div class="toggle viewport-toggle" role="group" aria-label="{{labels.viewportsLabel}}">{{viewportButtons}}</div>
         </div>
       </div>
+      <section class="review-bar" id="review-bar" hidden>
+        <span id="diff-counts"></span>
+        <div class="review-actions">
+          <button type="button" id="changed-only" aria-pressed="false">{{labels.changedOnly}}</button>
+          <button type="button" id="previous-change">← {{labels.previousChange}}</button>
+          <button type="button" id="next-change">{{labels.nextChange}} →</button>
+        </div>
+      </section>
       <div id="diagram-view">
       <section class="diagram-wrap" aria-label="{{labels.diagram}}">
         <div class="diagram" id="diagram"></div>
@@ -36,7 +48,9 @@
         <aside class="metadata">
           <h2 id="node-title"></h2>
           <p id="node-condition"></p>
+          <div class="toggle image-toggle" id="image-toggle" role="group" aria-label="{{labels.difference}}" hidden><button type="button" data-image-mode="before" aria-pressed="false">{{labels.before}}</button><button type="button" data-image-mode="after" aria-pressed="true">{{labels.after}}</button><button type="button" data-image-mode="diff" aria-pressed="false">{{labels.difference}}</button></div>
           <code id="image-path"></code>
+          <div class="diff-summary" id="diff-summary"></div>
           <dl id="capture-meta"></dl>
           <a class="open-original" id="open-original" target="_blank" rel="noreferrer">{{labels.openOriginal}}</a>
         </aside>
@@ -45,6 +59,7 @@
       <div class="gallery" id="gallery"></div>
       </div>
       <section class="grid" id="grid-view" aria-label="{{labels.viewGrid}}" hidden></section>
+      <section class="compare" id="compare-view" aria-label="{{labels.viewCompare}}" hidden></section>
     </main>
   </div>
   <script>

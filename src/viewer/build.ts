@@ -4,8 +4,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readDiffReport } from "../diff.js";
 import { MANIFEST_FILE, readManifest } from "../manifest.js";
-import type { CaptureEntry, Config, Flow, Logger, Manifest, Scenario, ViewerLabels } from "../types.js";
+import type { CaptureEntry, Config, DiffResult, Flow, Logger, Manifest, Scenario, ViewerLabels } from "../types.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,24 @@ const DEFAULT_LABELS: ViewerLabels = {
   viewMode: "View",
   viewDiagram: "Diagram",
   viewGrid: "All screens",
+  viewCompare: "Compare viewports",
+  searchPlaceholder: "Search screens…",
+  copyLink: "Copy link",
+  copied: "Copied",
+  changedOnly: "Changed only",
+  allScreens: "All screens",
+  previousChange: "Previous change",
+  nextChange: "Next change",
+  before: "Before",
+  after: "After",
+  difference: "Difference",
+  changed: "changed",
+  newCapture: "new",
+  diffError: "diff error",
+  missingCount: "missing",
+  failedCount: "failed",
+  noMatches: "No matching screens.",
+  noChanges: "No changed screens in this view.",
   openOriginal: "Open full size",
   noImage: "No capture (transition target)",
   transitionOnly: "This node is a transition target and has no screenshot.",
@@ -36,8 +55,18 @@ export interface ViewerData {
   flows: Flow[];
   viewports: Array<{ name: string; width: number; height: number; label: string }>;
   captures: CaptureEntry[];
+  diffResults: DiffResult[];
+  flowStatuses: Record<string, ViewerFlowStatus>;
   labels: ViewerLabels;
   generatedAt: string;
+}
+
+export interface ViewerFlowStatus {
+  changed: number;
+  new: number;
+  errors: number;
+  missing: number;
+  failures: number;
 }
 
 export interface MissingImage {
@@ -121,6 +150,27 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
   if (extra) flows.push(extra);
   if (flows.length === 0) throw new Error("No flows to show: declare `flows` on at least one scenario.");
 
+  const missing = missingImages(flows, manifest);
+  const diffReport = await readDiffReport(config.outDir);
+  const diffResults = diffReport?.manifestGeneratedAt === manifest.generatedAt ? diffReport.results : [];
+  const flowScenarios = new Map(scenarios.flatMap((scenario) => scenario.flows.map((flow) => [flow.id, scenario.id] as const)));
+  const flowStatuses = Object.fromEntries(flows.map((flow) => {
+    const viewports = flow.viewports ?? manifest.viewports.map((viewport) => viewport.name);
+    const paths = new Set(flow.nodes.flatMap((node) => node.image ? viewports.map((viewport) => `${viewport}/${node.image}`) : []));
+    const results = diffResults.filter((result) => paths.has(result.path));
+    const scenario = flowScenarios.get(flow.id);
+    const failures = scenario
+      ? manifest.failures.filter((failure) => failure.scenario === scenario && (!failure.viewport || viewports.includes(failure.viewport))).length
+      : 0;
+    return [flow.id, {
+      changed: results.filter((result) => result.status === "changed").length,
+      new: results.filter((result) => result.status === "new").length,
+      errors: results.filter((result) => result.status === "error").length,
+      missing: missing.filter((entry) => entry.flow === flow.id).length,
+      failures,
+    } satisfies ViewerFlowStatus];
+  }));
+
   const data: ViewerData = {
     flows,
     viewports: manifest.viewports.map((viewport) => ({
@@ -128,6 +178,8 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
       label: config.viewer.viewportLabels?.[viewport.name] ?? viewport.name,
     })),
     captures: manifest.captures,
+    diffResults,
+    flowStatuses,
     labels,
     generatedAt: manifest.generatedAt,
   };
@@ -155,6 +207,15 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
     .replaceAll("{{labels.viewMode}}", escapeHtml(labels.viewMode))
     .replaceAll("{{labels.viewDiagram}}", escapeHtml(labels.viewDiagram))
     .replaceAll("{{labels.viewGrid}}", escapeHtml(labels.viewGrid))
+    .replaceAll("{{labels.viewCompare}}", escapeHtml(labels.viewCompare))
+    .replaceAll("{{labels.searchPlaceholder}}", escapeHtml(labels.searchPlaceholder))
+    .replaceAll("{{labels.copyLink}}", escapeHtml(labels.copyLink))
+    .replaceAll("{{labels.changedOnly}}", escapeHtml(labels.changedOnly))
+    .replaceAll("{{labels.previousChange}}", escapeHtml(labels.previousChange))
+    .replaceAll("{{labels.nextChange}}", escapeHtml(labels.nextChange))
+    .replaceAll("{{labels.before}}", escapeHtml(labels.before))
+    .replaceAll("{{labels.after}}", escapeHtml(labels.after))
+    .replaceAll("{{labels.difference}}", escapeHtml(labels.difference))
     .replaceAll("{{labels.openOriginal}}", escapeHtml(labels.openOriginal))
     .replace("/*{{css}}*/", () => css)
     .replace("/*{{data}}*/", () => `const DATA = ${JSON.stringify(data).replace(/</g, "\\u003c")};`)
@@ -163,5 +224,5 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
   const output = path.resolve(config.outDir, "index.html");
   await writeFile(output, html, "utf8");
   log?.info(`saved ${output} (${manifest.captures.length} captures, ${flows.length} flows)`);
-  return { output, flows, missing: missingImages(flows, manifest) };
+  return { output, flows, missing };
 }

@@ -27,6 +27,24 @@ export interface ViewerLabels {
   viewMode: string;
   viewDiagram: string;
   viewGrid: string;
+  viewCompare: string;
+  searchPlaceholder: string;
+  copyLink: string;
+  copied: string;
+  changedOnly: string;
+  allScreens: string;
+  previousChange: string;
+  nextChange: string;
+  before: string;
+  after: string;
+  difference: string;
+  changed: string;
+  newCapture: string;
+  diffError: string;
+  missingCount: string;
+  failedCount: string;
+  noMatches: string;
+  noChanges: string;
   openOriginal: string;
   noImage: string;
   transitionOnly: string;
@@ -268,4 +286,14 @@ export interface DiffResult {
   /** Path of the before | after | changes image relative to `outDir`. */
   diffImage?: string | null;
   message?: string;
+}
+
+/** Persisted metadata for the most recent `flowshot diff` invocation. */
+export interface DiffReport {
+  version: 1;
+  generatedAt: string;
+  /** The capture manifest this report was calculated from. */
+  manifestGeneratedAt: string;
+  baseline: string;
+  results: DiffResult[];
 }

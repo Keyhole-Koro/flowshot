@@ -32,10 +32,37 @@ interface ViewerCapture {
   capturedAt: string;
 }
 
+type ViewerDiffStatus = "changed" | "same" | "new" | "error";
+
+interface ViewerDiffResult {
+  path: string;
+  scenario: string;
+  viewport: string;
+  status: ViewerDiffStatus;
+  ratio?: number;
+  changedPixels?: number;
+  sizeChanged?: boolean;
+  notes?: string[];
+  regions?: Array<{ x: number; y: number; width: number; height: number; image: string | null }>;
+  omittedRegions?: number;
+  diffImage?: string | null;
+  message?: string;
+}
+
+interface ViewerFlowStatus {
+  changed: number;
+  new: number;
+  errors: number;
+  missing: number;
+  failures: number;
+}
+
 interface ViewerData {
   flows: ViewerFlow[];
   viewports: Array<{ name: string; width: number; height: number; label: string }>;
   captures: ViewerCapture[];
+  diffResults: ViewerDiffResult[];
+  flowStatuses: Record<string, ViewerFlowStatus>;
   labels: Record<string, string>;
   generatedAt: string;
 }
