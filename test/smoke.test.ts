@@ -58,6 +58,20 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
       await page.reload();
       assert.equal(await page.locator("#node-title").textContent(), "Email taken");
       assert.equal(await page.locator("#image-path").textContent(), "mobile/signup/02_email-taken.png");
+      assert.equal(await page.locator("#diagram-wrap").isHidden(), true);
+      await page.locator("#flow-map-toggle").click();
+      assert.equal(await page.locator("#diagram-wrap").isVisible(), true);
+      assert.equal(await page.locator("#preview").isVisible(), true);
+      assert.match(new URL(page.url()).hash, /map=1/);
+      const diagramBox = await page.locator("#diagram-wrap").boundingBox();
+      const previewBox = await page.locator("#preview").boundingBox();
+      assert.ok(diagramBox && previewBox && diagramBox.y + diagramBox.height <= previewBox.y);
+      await page.locator(".node").filter({ hasText: "Password too short" }).click();
+      assert.equal(await page.locator("#diagram-wrap").isVisible(), true);
+      assert.equal(await page.locator("#node-title").textContent(), "Password too short");
+      await page.reload();
+      assert.equal(await page.locator("#diagram-wrap").isVisible(), true);
+      assert.equal(await page.locator("#flow-map-toggle").getAttribute("aria-pressed"), "true");
     } finally {
       await browser.close();
     }
@@ -110,6 +124,7 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
       await page.keyboard.press("ArrowRight");
       assert.equal(await page.locator("#node-title").innerText(), "Password too short");
       await page.locator("#copy-link").click();
+      await assert.doesNotReject(page.locator("#copy-link").filter({ hasText: "Copied" }).waitFor());
       assert.equal(await page.locator("#copy-link").innerText(), "Copied");
     } finally {
       await reviewBrowser.close();

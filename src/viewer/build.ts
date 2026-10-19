@@ -17,9 +17,10 @@ const DEFAULT_LABELS: ViewerLabels = {
   screens: "{n} screens",
   sameFlow: "Screens in this flow",
   viewMode: "View",
-  viewDiagram: "Diagram",
+  viewDiagram: "Selected screen",
   viewGrid: "All screens",
   viewCompare: "Compare viewports",
+  fullFlow: "Full flow",
   searchPlaceholder: "Search screens…",
   copyLink: "Copy link",
   copied: "Copied",
@@ -208,6 +209,7 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
     .replaceAll("{{labels.viewDiagram}}", escapeHtml(labels.viewDiagram))
     .replaceAll("{{labels.viewGrid}}", escapeHtml(labels.viewGrid))
     .replaceAll("{{labels.viewCompare}}", escapeHtml(labels.viewCompare))
+    .replaceAll("{{labels.fullFlow}}", escapeHtml(labels.fullFlow))
     .replaceAll("{{labels.searchPlaceholder}}", escapeHtml(labels.searchPlaceholder))
     .replaceAll("{{labels.copyLink}}", escapeHtml(labels.copyLink))
     .replaceAll("{{labels.changedOnly}}", escapeHtml(labels.changedOnly))

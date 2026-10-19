@@ -19,6 +19,7 @@ interface ViewerState {
   view: ViewMode;
   image: ImageMode;
   changedOnly: boolean;
+  flowMapOpen: boolean;
 }
 
 interface ReviewItem {
@@ -50,6 +51,7 @@ function stateFromHash(): ViewerState {
     view: requestedView === "grid" || requestedView === "compare" ? requestedView : "diagram",
     image: requestedImage === "before" || requestedImage === "diff" ? requestedImage : "after",
     changedOnly: params.get("filter") === "changed",
+    flowMapOpen: params.get("map") === "1",
   };
 }
 
@@ -83,6 +85,7 @@ function syncHash(): void {
   });
   if (state.image !== "after") params.set("image", state.image);
   if (state.changedOnly) params.set("filter", "changed");
+  if (state.flowMapOpen) params.set("map", "1");
   history.replaceState(null, "", `${location.pathname}${location.search}#${params}`);
 }
 
@@ -403,6 +406,13 @@ function renderDetail(): void {
 
 function setView(view: string): void {
   state.view = view === "grid" || view === "compare" ? view : "diagram";
+  if (state.view !== "diagram") state.flowMapOpen = false;
+  commit();
+}
+
+function toggleFlowMap(): void {
+  state.flowMapOpen = !state.flowMapOpen;
+  if (state.flowMapOpen) state.view = "diagram";
   commit();
 }
 
@@ -560,6 +570,9 @@ function render(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.view === state.view));
   });
+  const flowMapToggle = element("flow-map-toggle");
+  flowMapToggle.setAttribute("aria-pressed", String(state.flowMapOpen));
+  element("diagram-wrap").hidden = state.view !== "diagram" || !state.flowMapOpen;
   element("diagram-view").hidden = state.view !== "diagram";
   element("grid-view").hidden = state.view !== "grid";
   element("compare-view").hidden = state.view !== "compare";
@@ -570,7 +583,7 @@ function render(): void {
   if (state.view === "grid") renderGrid();
   else if (state.view === "compare") renderCompare();
   else {
-    renderDiagram();
+    if (state.flowMapOpen) renderDiagram();
     renderDetail();
   }
 }
@@ -636,6 +649,7 @@ element("changed-only").onclick = () => {
 element("previous-change").onclick = () => moveReview(-1);
 element("next-change").onclick = () => moveReview(1);
 element("copy-link").onclick = () => { void copyLink(); };
+element("flow-map-toggle").onclick = toggleFlowMap;
 element("search-input").addEventListener("input", renderSearchResults);
 window.addEventListener("keydown", (event) => {
   const target = event.target;
@@ -658,10 +672,12 @@ window.addEventListener("keydown", (event) => {
     moveReview(1);
   } else if (!typing && event.key.toLocaleLowerCase() === "p" && DATA.diffResults.length) {
     moveReview(-1);
+  } else if (!typing && event.key.toLocaleLowerCase() === "g") {
+    toggleFlowMap();
   }
 });
 window.addEventListener("resize", () => {
-  if (state.view === "diagram") renderDiagram();
+  if (state.view === "diagram" && state.flowMapOpen) renderDiagram();
 });
 window.addEventListener("hashchange", () => {
   Object.assign(state, stateFromHash());

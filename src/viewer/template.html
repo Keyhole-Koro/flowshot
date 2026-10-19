@@ -27,6 +27,7 @@
         </div>
         <div class="toggles">
           <button class="utility-button" type="button" id="copy-link">{{labels.copyLink}}</button>
+          <button class="utility-button" type="button" id="flow-map-toggle" aria-pressed="false" title="{{labels.fullFlow}} (G)">{{labels.fullFlow}}</button>
           <div class="toggle" role="group" aria-label="{{labels.viewMode}}"><button type="button" data-view="diagram" aria-pressed="true">{{labels.viewDiagram}}</button><button type="button" data-view="grid" aria-pressed="false">{{labels.viewGrid}}</button><button type="button" data-view="compare" aria-pressed="false">{{labels.viewCompare}}</button></div>
           <div class="toggle viewport-toggle" role="group" aria-label="{{labels.viewportsLabel}}">{{viewportButtons}}</div>
         </div>
@@ -40,7 +41,7 @@
         </div>
       </section>
       <div id="diagram-view">
-      <section class="diagram-wrap" aria-label="{{labels.diagram}}">
+      <section class="diagram-wrap" id="diagram-wrap" aria-label="{{labels.diagram}}" hidden>
         <div class="diagram" id="diagram"></div>
       </section>
       <section class="detail">

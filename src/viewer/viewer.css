@@ -50,6 +50,7 @@ h1 { margin: 0; font-size: clamp(22px, 3vw, 30px); }
 .toggles { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .utility-button, .review-actions button { border: 1px solid #c6d2de; border-radius: 8px; background: #fff; color: #456078; padding: 8px 11px; cursor: pointer; white-space: nowrap; }
 .utility-button:hover, .review-actions button:hover { border-color: #7294b0; color: #234d70; }
+.utility-button[aria-pressed="true"] { border-color: #28567f; background: #28567f; color: #fff; }
 .toggle { display: flex; border: 1px solid #c6d2de; border-radius: 8px; overflow: hidden; background: #fff; }
 .toggle button { border: 0; background: #fff; color: #456078; padding: 8px 11px; cursor: pointer; white-space: nowrap; }
 .toggle button[aria-pressed="true"] { background: #28567f; color: #fff; }
@@ -60,7 +61,8 @@ h1 { margin: 0; font-size: clamp(22px, 3vw, 30px); }
 .review-actions button { padding: 6px 9px; border-color: #dfce8a; }
 .review-actions button[aria-pressed="true"] { background: #695817; border-color: #695817; color: #fff; }
 
-.diagram-wrap { overflow-x: auto; padding: 6px 0 16px; }
+.diagram-wrap[hidden] { display: none; }
+.diagram-wrap { max-height: min(52vh, 520px); overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; margin: 0 0 16px; padding: 6px 0 0; }
 .diagram { position: relative; min-width: 820px; height: 330px; overflow: hidden; border: 1px solid #d7e0e8; border-radius: 12px; background: #fff; }
 .edge { position: absolute; height: 2px; background: #9ab0c4; transform-origin: 0 50%; z-index: 0; }
 .edge::after { content: ""; position: absolute; right: -1px; top: -3px; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 7px solid #9ab0c4; }
@@ -139,6 +141,7 @@ code { display: block; overflow-wrap: anywhere; color: #245c88; font-size: 11px;
   .heading { display: block; }
   .toggles { justify-content: flex-start; margin: 12px 0 16px; }
   .review-bar { align-items: flex-start; flex-direction: column; }
+  .diagram-wrap { max-height: min(48vh, 420px); }
   .diagram { height: 300px; }
   .detail { display: block; }
   .preview { height: min(62vh, 520px); }

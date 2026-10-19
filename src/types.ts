@@ -28,6 +28,7 @@ export interface ViewerLabels {
   viewDiagram: string;
   viewGrid: string;
   viewCompare: string;
+  fullFlow: string;
   searchPlaceholder: string;
   copyLink: string;
   copied: string;
