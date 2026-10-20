@@ -593,24 +593,6 @@ function commit(): void {
   syncHash();
 }
 
-async function copyLink(): Promise<void> {
-  const button = element("copy-link") as HTMLButtonElement;
-  try {
-    await navigator.clipboard.writeText(location.href);
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = location.href;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.append(textarea);
-    textarea.select();
-    document.execCommand("copy");
-    textarea.remove();
-  }
-  button.textContent = label("copied");
-  window.setTimeout(() => { button.textContent = label("copyLink"); }, 1400);
-}
-
 function moveNode(delta: number): void {
   const nodes = currentFlow().nodes.filter((node) => node.image).filter((node) => !state.changedOnly || needsReview(diffFor(node)));
   if (!nodes.length) return;
@@ -648,7 +630,6 @@ element("changed-only").onclick = () => {
 };
 element("previous-change").onclick = () => moveReview(-1);
 element("next-change").onclick = () => moveReview(1);
-element("copy-link").onclick = () => { void copyLink(); };
 element("flow-map-toggle").onclick = toggleFlowMap;
 element("search-input").addEventListener("input", renderSearchResults);
 window.addEventListener("keydown", (event) => {

@@ -123,9 +123,7 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
       assert.equal(await page.locator("#node-title").innerText(), "Email taken");
       await page.keyboard.press("ArrowRight");
       assert.equal(await page.locator("#node-title").innerText(), "Password too short");
-      await page.locator("#copy-link").click();
-      await assert.doesNotReject(page.locator("#copy-link").filter({ hasText: "Copied" }).waitFor());
-      assert.equal(await page.locator("#copy-link").innerText(), "Copied");
+      assert.equal(await page.locator("#copy-link").count(), 0);
     } finally {
       await reviewBrowser.close();
     }
