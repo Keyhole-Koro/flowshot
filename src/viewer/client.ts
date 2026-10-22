@@ -142,30 +142,49 @@ function renderHealthSummary(): void {
 
 function renderNavigation(): void {
   const flows = state.changedOnly ? DATA.flows.filter(flowNeedsReview) : DATA.flows;
-  const buttons = flows.map((flow) => {
-    const button = document.createElement("button");
-    button.className = "flow-button";
-    button.type = "button";
-    button.setAttribute("aria-current", String(flow.id === state.flow));
-    const title = document.createElement("span");
-    title.className = "flow-button-title";
-    title.textContent = flow.title;
-    const small = document.createElement("small");
-    small.textContent = label("screens").replace("{n}", String(flow.nodes.length));
-    const badges = document.createElement("span");
-    badges.className = "flow-button-badges";
-    badges.append(...flowStatusBadges(flow));
-    button.append(title, small, badges);
-    button.onclick = () => {
-      state.flow = flow.id;
-      state.node = flow.nodes[0]?.id ?? state.node;
-      const allowed = flowViewports(flow);
-      if (!allowed.includes(state.viewport)) state.viewport = allowed[0] ?? state.viewport;
-      commit();
-    };
-    return button;
+  const groups = new Map<string, ViewerFlow[]>();
+  for (const flow of flows) {
+    const group = flow.group || label("flows");
+    const items = groups.get(group) ?? [];
+    items.push(flow);
+    groups.set(group, items);
+  }
+  const sections = [...groups].map(([group, groupFlows]) => {
+    const section = document.createElement("section");
+    section.className = "flow-group";
+    const heading = document.createElement("h2");
+    heading.className = "flow-group-title";
+    heading.textContent = group;
+    const list = document.createElement("div");
+    list.className = "flow-group-list";
+    const buttons = groupFlows.map((flow) => {
+      const button = document.createElement("button");
+      button.className = "flow-button";
+      button.type = "button";
+      button.setAttribute("aria-current", String(flow.id === state.flow));
+      const title = document.createElement("span");
+      title.className = "flow-button-title";
+      title.textContent = flow.title;
+      const small = document.createElement("small");
+      small.textContent = label("screens").replace("{n}", String(flow.nodes.length));
+      const badges = document.createElement("span");
+      badges.className = "flow-button-badges";
+      badges.append(...flowStatusBadges(flow));
+      button.append(title, small, badges);
+      button.onclick = () => {
+        state.flow = flow.id;
+        state.node = flow.nodes[0]?.id ?? state.node;
+        const allowed = flowViewports(flow);
+        if (!allowed.includes(state.viewport)) state.viewport = allowed[0] ?? state.viewport;
+        commit();
+      };
+      return button;
+    });
+    list.append(...buttons);
+    section.append(heading, list);
+    return section;
   });
-  document.querySelector(".flow-list")?.replaceChildren(...buttons);
+  document.querySelector(".flow-list")?.replaceChildren(...sections);
 }
 
 function searchableText(flow: ViewerFlow, node: ViewerFlowNode): string {

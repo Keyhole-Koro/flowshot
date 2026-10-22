@@ -14,6 +14,7 @@ interface ViewerFlowNode {
 interface ViewerFlow {
   id: string;
   title: string;
+  group?: string;
   description?: string;
   viewports?: string[];
   diagramHeight?: number;

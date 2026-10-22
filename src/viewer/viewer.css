@@ -28,7 +28,11 @@ button { font: inherit; }
 .sidebar .status-badge.is-new { background: #24533a; color: #d7f7e1; }
 .sidebar .status-badge.is-error, .sidebar .status-badge.is-failed { background: #6b3035; color: #ffe1e1; }
 .sidebar .status-badge.is-missing { background: #5d4a31; color: #f7e8d0; }
-.flow-list { display: grid; gap: 7px; }
+.flow-list { display: grid; gap: 16px; }
+.flow-group { min-width: 0; }
+.flow-group + .flow-group { border-top: 1px solid #2f4963; padding-top: 14px; }
+.flow-group-title { margin: 0 4px 7px; color: #91a6bb; font-size: 10px; font-weight: 700; letter-spacing: .08em; line-height: 1.4; text-transform: uppercase; }
+.flow-group-list { display: grid; gap: 7px; }
 .flow-button { width: 100%; border: 0; border-radius: 8px; background: transparent; color: #d8e3ee; padding: 11px 12px; text-align: left; cursor: pointer; }
 .flow-button:hover, .flow-button[aria-current="true"] { background: #28567f; color: #fff; }
 .flow-button-title { display: block; font-weight: 700; }
@@ -133,7 +137,10 @@ code { display: block; overflow-wrap: anywhere; color: #245c88; font-size: 11px;
   .shell { display: block; }
   .sidebar { position: static; height: auto; overflow: visible; padding: 14px 16px; }
   .sub { margin-bottom: 12px; }
-  .flow-list { display: flex; overflow-x: auto; }
+  .flow-list { display: flex; gap: 16px; overflow-x: auto; }
+  .flow-group { flex: 0 0 auto; }
+  .flow-group + .flow-group { border-top: 0; border-left: 1px solid #2f4963; padding-top: 0; padding-left: 16px; }
+  .flow-group-list { display: flex; }
   .flow-button { flex: 0 0 190px; }
   .search-results { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   .generated-at { display: none; }

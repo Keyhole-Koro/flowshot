@@ -86,7 +86,7 @@ export function collectFlows(scenarios: Scenario[]): Flow[] {
   for (const scenario of scenarios) {
     for (const flow of scenario.flows ?? []) {
       if (flows.some((existing) => existing.id === flow.id)) throw new Error(`Duplicate flow id "${flow.id}" (scenario ${scenario.id})`);
-      flows.push(flow);
+      flows.push({ ...flow, group: flow.group ?? scenario.group ?? scenario.title });
     }
   }
   return flows;
@@ -102,6 +102,7 @@ function unassignedFlow(flows: Flow[], captures: CaptureEntry[], labels: ViewerL
   return {
     id: "__unassigned",
     title: labels.unassigned,
+    group: labels.unassigned,
     description: labels.unassignedDescription,
     diagramHeight: Math.max(200, rows * 80 + 40),
     nodes: ids.map((id, index) => ({

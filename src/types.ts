@@ -119,6 +119,8 @@ export type FlowEdge = [string, string, string?];
 export interface Flow {
   id: string;
   title: string;
+  /** Sidebar category. Defaults to the owning scenario title. */
+  group?: string;
   description?: string;
   /** Restrict to these viewport names (default: all). */
   viewports?: string[];
@@ -199,6 +201,8 @@ export interface ScenarioDefinition<State = unknown> {
   /** `[a-z0-9-]`, unique. */
   id: string;
   title?: string;
+  /** Default sidebar category for this scenario's flows. */
+  group?: string;
   description?: string;
   /** Sort key for run and viewer order (default 0, then file path). */
   order?: number;

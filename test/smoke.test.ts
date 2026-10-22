@@ -50,6 +50,8 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
       await assert.doesNotReject(page.locator("#grid-view").waitFor({ state: "visible" }));
       assert.equal(await page.locator("#flow-title").textContent(), "Dashboard states");
       assert.equal(await page.locator('[data-viewport="mobile"]').getAttribute("aria-pressed"), "true");
+      assert.equal(await page.locator(".flow-group").count(), 3);
+      assert.deepEqual(await page.locator(".flow-group-title").allTextContents(), ["Public pages", "Dashboard states", "Mobile navigation"]);
 
       await page.locator(".flow-button").filter({ hasText: "Public pages" }).click();
       assert.equal(new URL(page.url()).hash, "#flow=public&node=home&viewport=mobile&view=grid");
@@ -141,17 +143,18 @@ test("example project: run → lint → diff → inspect", { timeout: 180_000 },
 });
 
 test("defineScenario validates steps and flows", async () => {
-  const { defineScenario } = await import("../dist/index.js");
+  const { collectFlows, defineScenario } = await import("../dist/index.js");
   assert.throws(() => defineScenario({ id: "Bad Id", async capture() {} }), /id must match/);
   assert.throws(() => defineScenario({ id: "x" }), /capture\(\) function or steps/);
   assert.throws(() => defineScenario({ id: "x", steps: [{ id: "a" }, { id: "b", from: "zzz" }] }), /unknown step/);
-  const scenario = defineScenario({ id: "ok", steps: [{ id: "a", image: "a.png" }, { id: "b", image: "b.png", via: "next" }] });
+  const scenario = defineScenario({ id: "ok", group: "Account", steps: [{ id: "a", image: "a.png" }, { id: "b", image: "b.png", via: "next" }] });
   const flow = scenario.flows[0];
   assert.ok(flow);
   assert.equal(flow.id, "ok");
   assert.deepEqual(flow.edges, [["a", "b", "next"]]);
   const [a, b] = flow.nodes;
   assert.ok(a && b && a.x < b.x);
+  assert.equal(collectFlows([scenario])[0]?.group, "Account");
 });
 
 test("diff splits changes into regions and describes size changes", async () => {
