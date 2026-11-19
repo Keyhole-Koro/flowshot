@@ -388,3 +388,19 @@ test("cookiesFor scopes cookies to baseUrl without clashing with domain/path", (
     assert.ok(cookie.url ? !cookie.domain && !cookie.path : Boolean(cookie.domain && cookie.path), JSON.stringify(cookie));
   }
 });
+
+test("buildViewer fills placeholders once: config text containing placeholders stays literal", async (t) => {
+  const dir = await tempDir(t);
+  const html = await viewerFixture(dir, {
+    title: "/*{{data}}*/ {{labels.flows}}",
+    subtitle: "$& $1 $$ {{title}}",
+    labels: { flows: "/*{{js}}*/" },
+  });
+  assert.match(html, /<title>\/\*\{\{data\}\}\*\/ \{\{labels\.flows\}\} — \$&amp; \$1 \$\$ \{\{title\}\}<\/title>/);
+  assert.match(html, /<nav class="flow-list" aria-label="\/\*\{\{js\}\}\*\/">/);
+  // DATA and the client code land in the script element, once each.
+  assert.equal(html.match(/const DATA = \{/g)?.length, 1);
+  assert.match(html, /<script>\s*const DATA = \{/);
+  const client = await readFile(path.join(ROOT, "dist/viewer/client.js"), "utf8");
+  assert.equal(html.split(client).length, 2);
+});
