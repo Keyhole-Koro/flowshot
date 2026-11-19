@@ -49,6 +49,23 @@ function contextOptions(viewport: Viewport, extra: Omit<NewContextOptions, "cook
   };
 }
 
+type CookieInput = NonNullable<NewContextOptions["cookies"]>[number];
+
+/**
+ * Cookies for `context.addCookies()`, scoped to `baseUrl` unless they say
+ * otherwise. Playwright wants either `url` or a `domain`/`path` pair, so a
+ * cookie with its own `url` or `domain` is not given `url: baseUrl`: a
+ * missing `path` becomes "/" and a missing `domain` the host of `baseUrl`.
+ */
+export function cookiesFor<T extends CookieInput>(baseUrl: string, cookies: T[]): T[] {
+  return cookies.map((cookie) => {
+    if (cookie.url) return cookie;
+    if (cookie.domain) return cookie.path ? cookie : { ...cookie, path: "/" };
+    if (cookie.path) return { ...cookie, domain: new URL(baseUrl).hostname };
+    return { url: baseUrl, ...cookie };
+  });
+}
+
 async function keepPrevious(config: Config, file: string, backedUp: Set<string>): Promise<void> {
   if (backedUp.has(file)) return;
   backedUp.add(file);
@@ -107,7 +124,7 @@ function createCaptureContext<State>({ browser, config, scenario, viewport, stat
     async newContext({ cookies, ...options } = {}) {
       const context = track(await browser.newContext(contextOptions(viewport, options)));
       if (cookies?.length) {
-        await context.addCookies(cookies.map((cookie) => ({ url: config.baseUrl, ...cookie })));
+        await context.addCookies(cookiesFor(config.baseUrl, cookies));
       }
       return context;
     },

@@ -27,6 +27,7 @@ import {
 import type { CaptureEntry, Config, Manifest, RgbaImage } from "../dist/index.js";
 import { parseConcurrency } from "../dist/config.js";
 import { resolveInside } from "../dist/paths.js";
+import { cookiesFor } from "../dist/runner.js";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CLI = path.join(ROOT, "bin/flowshot.js");
@@ -372,4 +373,18 @@ test("CLI rejects invalid --tile, --crop and --threshold values", async (t) => {
   assert.deepEqual(JSON.parse(cropped.stdout).pieces.map(({ x, y, width, height }: { x: number; y: number; width: number; height: number }) => [x, y, width, height]), [[-2, 10, 3, 240]]);
   const diffed = await flowshot(dir, ["diff", "--threshold", "0.5"], env);
   assert.match(diffed.stderr, /no manifest\.json/);
+});
+
+test("cookiesFor scopes cookies to baseUrl without clashing with domain/path", () => {
+  const base = "http://app.test:3000/sub";
+  assert.deepEqual(cookiesFor(base, [{ name: "a", value: "1" }]), [{ url: base, name: "a", value: "1" }]);
+  assert.deepEqual(cookiesFor(base, [{ name: "b", value: "2", domain: ".other.test", path: "/x" }]), [{ name: "b", value: "2", domain: ".other.test", path: "/x" }]);
+  assert.deepEqual(cookiesFor(base, [{ name: "c", value: "3", domain: "app.test" }]), [{ name: "c", value: "3", domain: "app.test", path: "/" }]);
+  assert.deepEqual(cookiesFor(base, [{ name: "d", value: "4", path: "/admin" }]), [{ name: "d", value: "4", path: "/admin", domain: "app.test" }]);
+  assert.deepEqual(cookiesFor(base, [{ name: "e", value: "5", url: "https://x.test/" }]), [{ name: "e", value: "5", url: "https://x.test/" }]);
+  // Every result is either url-only or a domain/path pair, as Playwright requires.
+  const mixed: Array<{ name: string; value: string; url?: string; domain?: string; path?: string }> = [{ name: "a", value: "1" }, { name: "c", value: "3", domain: "app.test" }, { name: "d", value: "4", path: "/p" }];
+  for (const cookie of cookiesFor(base, mixed)) {
+    assert.ok(cookie.url ? !cookie.domain && !cookie.path : Boolean(cookie.domain && cookie.path), JSON.stringify(cookie));
+  }
 });
