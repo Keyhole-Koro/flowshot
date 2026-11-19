@@ -7,6 +7,7 @@ import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { PREVIOUS_DIR } from "./diff.js";
 import { captureId, pngSize, writeManifest } from "./manifest.js";
+import { resolveInside } from "./paths.js";
 import type { CaptureContext, CaptureEntry, Concurrency, Config, Logger, Manifest, NewContextOptions, Scenario, ShootOptions, Viewport } from "./types.js";
 
 const noopLog: Logger = { info() {}, warn() {}, error() {} };
@@ -122,7 +123,8 @@ function createCaptureContext<State>({ browser, config, scenario, viewport, stat
 
     async shoot(page, relativePath, { fullPage = true, settle: shouldSettle = true, ...options }: ShootOptions = {}) {
       const relative = relativePath.replace(/^\/+/, "");
-      const file = path.join(config.outDir, viewport.name, relative);
+      // Throws before anything is written when the path leaves outDir.
+      const file = resolveInside(config.outDir, path.join(viewport.name, relative));
       await mkdir(path.dirname(file), { recursive: true });
       // Keep the version we are about to overwrite so `flowshot diff` can compare.
       await keepPrevious(config, file, backedUp);

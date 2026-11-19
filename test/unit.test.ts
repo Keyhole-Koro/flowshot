@@ -2,7 +2,7 @@
 // (`npm run build` first), like the smoke test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
   comparePixels,
   crop,
   defineScenario,
+  diffCaptures,
   edgesFromSteps,
   layoutSteps,
   loadConfig,
@@ -22,6 +23,7 @@ import {
 } from "../dist/index.js";
 import type { CaptureEntry, Config, Manifest, RgbaImage } from "../dist/index.js";
 import { parseConcurrency } from "../dist/config.js";
+import { resolveInside } from "../dist/paths.js";
 
 async function tempDir(t: { after(fn: () => Promise<void>): void }): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "flowshot-unit-"));
@@ -269,4 +271,42 @@ test("buildViewer escapes config text and keeps DATA inside its script", async (
   // `<` inside DATA is escaped, so a flow title cannot close the script element.
   assert.match(html, /\\u003c\/script>\\u003cscript>alert\(5\)/);
   assert.equal(html.match(/<\/script>/g)?.length, html.match(/<script>/g)?.length);
+});
+
+const fileExists = (file: string) => access(file).then(() => true, () => false);
+
+test("resolveInside keeps paths inside the root", () => {
+  const root = path.join(os.tmpdir(), "flowshot-root");
+  assert.equal(resolveInside(root, "a/b.png"), path.join(root, "a/b.png"));
+  assert.equal(resolveInside(root, "pc/../mobile/x.png"), path.join(root, "mobile/x.png"));
+  assert.equal(resolveInside(root, "..x/y.png"), path.join(root, "..x/y.png"));
+  for (const bad of ["../x.png", "pc/../../x", "/abs/x.png", "", ".", "pc/.."]) {
+    assert.throws(() => resolveInside(root, bad), /resolves outside/, bad);
+  }
+});
+
+test("diffCaptures refuses capture paths that leave outDir", async (t) => {
+  const dir = await tempDir(t);
+  const outDir = path.join(dir, "w/out");
+  const baselineDir = path.join(dir, "b1/b2");
+  // Two different images where `../../x.png` points from outDir and baselineDir.
+  await mkdir(path.join(dir, "b1"), { recursive: true });
+  await writePng(path.join(dir, "x.png"), solid(4, 4, [0, 0, 0, 255]));
+  await writePng(path.join(dir, "b1/x.png"), solid(4, 4));
+  // An old region image next to where the escaping diff would be written.
+  await mkdir(path.join(dir, "w"), { recursive: true });
+  await writeFile(path.join(dir, "w/x.region-1.png"), "keep");
+  // A normal capture still diffs as before.
+  await mkdir(path.join(outDir, "pc"), { recursive: true });
+  await mkdir(path.join(baselineDir, "pc"), { recursive: true });
+  await writePng(path.join(outDir, "pc/a.png"), solid(4, 4, [0, 0, 0, 255]));
+  await writePng(path.join(baselineDir, "pc/a.png"), solid(4, 4));
+
+  const results = await diffCaptures({ outDir, baselineDir, captures: [capture("pc/../../x.png"), { ...capture("pc/a.png"), path: "../../x.png" }, capture("pc/a.png")] });
+  assert.deepEqual(results.map((result) => result.status), ["error", "error", "changed"]);
+  assert.match(results[1]?.message ?? "", /resolves outside/);
+  assert.equal(await fileExists(path.join(dir, "w/x.png")), false);
+  assert.equal(await readFile(path.join(dir, "w/x.region-1.png"), "utf8"), "keep");
+  assert.equal(results[2]?.diffImage, ".diff/pc/a.png");
+  assert.equal(await fileExists(path.join(outDir, ".diff/pc/a.png")), true);
 });

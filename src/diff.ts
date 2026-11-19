@@ -7,6 +7,7 @@
 
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveInside } from "./paths.js";
 import { crop, readPng, writePng } from "./png.js";
 import type { CaptureEntry, DiffReport, DiffResult, RgbaImage } from "./types.js";
 
@@ -295,8 +296,17 @@ const REGION_MAX_WIDTH = 900;
 export async function diffCaptures({ outDir, baselineDir, captures, threshold = 0.0005, tolerance = 16, writeImages = true, viewportWidths = {} }: DiffOptions): Promise<DiffResult[]> {
   const results: DiffResult[] = [];
   for (const capture of captures) {
-    const currentFile = path.join(outDir, capture.path);
-    const baselineFile = path.join(baselineDir, capture.path);
+    let currentFile: string, baselineFile: string, diffFile: string;
+    try {
+      // Manifest paths must stay inside their trees: nothing is read, written
+      // or deleted for a path that escapes them.
+      currentFile = resolveInside(outDir, capture.path);
+      baselineFile = resolveInside(baselineDir, capture.path);
+      diffFile = resolveInside(path.join(outDir, DIFF_DIR), capture.path);
+    } catch (error) {
+      results.push({ path: capture.path, scenario: capture.scenario, viewport: capture.viewport, status: "error", message: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
     if (!(await exists(baselineFile))) {
       results.push({ path: capture.path, scenario: capture.scenario, viewport: capture.viewport, status: "new" });
       continue;
@@ -323,7 +333,6 @@ export async function diffCaptures({ outDir, baselineDir, captures, threshold = 
         diffImage: null,
       };
       if (changed && writeImages) {
-        const diffFile = path.join(outDir, DIFF_DIR, capture.path);
         await mkdir(path.dirname(diffFile), { recursive: true });
         // Drop region images from an earlier diff of this capture.
         const stem = path.basename(diffFile, ".png");
