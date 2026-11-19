@@ -367,8 +367,13 @@ export async function diffCaptures({ outDir, baselineDir, captures, threshold = 
   return results;
 }
 
-/** Split a tall image into tiles of `tileHeight` with `overlap` rows shared. */
+/**
+ * Split a tall image into tiles of `tileHeight` with `overlap` rows shared.
+ * `tileHeight` must be greater than `overlap`, or the tiles would not advance.
+ */
 export function tile(image: RgbaImage, { tileHeight = 1200, overlap = 40 }: { tileHeight?: number; overlap?: number } = {}): Array<{ y: number; image: RgbaImage }> {
+  if (!Number.isFinite(overlap) || overlap < 0) throw new RangeError(`tile overlap must be a number >= 0 (got ${overlap})`);
+  if (!Number.isFinite(tileHeight) || tileHeight <= overlap) throw new RangeError(`tile height must be a number greater than the ${overlap}px overlap (got ${tileHeight})`);
   const tiles: Array<{ y: number; image: RgbaImage }> = [];
   if (image.height <= tileHeight) return [{ y: 0, image }];
   let y = 0;

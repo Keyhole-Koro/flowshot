@@ -2,9 +2,12 @@
 // (`npm run build` first), like the smoke test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
   buildViewer,
   comparePixels,
@@ -24,6 +27,21 @@ import {
 import type { CaptureEntry, Config, Manifest, RgbaImage } from "../dist/index.js";
 import { parseConcurrency } from "../dist/config.js";
 import { resolveInside } from "../dist/paths.js";
+
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const CLI = path.join(ROOT, "bin/flowshot.js");
+
+/** Run the CLI in `cwd`; resolves with the exit code instead of rejecting. */
+async function flowshot(cwd: string, args: string[], env: Record<string, string> = {}): Promise<{ code: number; stdout: string; stderr: string }> {
+  try {
+    const { stdout, stderr } = await promisify(execFile)(process.execPath, [CLI, ...args], { cwd, env: { ...process.env, BASE_URL: "", OUT_DIR: "", ...env }, timeout: 30_000 });
+    return { code: 0, stdout, stderr };
+  } catch (error) {
+    const failed = error as { code?: number; stdout?: string; stderr?: string; killed?: boolean };
+    if (failed.killed) throw new Error(`flowshot ${args.join(" ")} timed out`);
+    return { code: typeof failed.code === "number" ? failed.code : 1, stdout: failed.stdout ?? "", stderr: failed.stderr ?? "" };
+  }
+}
 
 async function tempDir(t: { after(fn: () => Promise<void>): void }): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "flowshot-unit-"));
@@ -309,4 +327,49 @@ test("diffCaptures refuses capture paths that leave outDir", async (t) => {
   assert.equal(await readFile(path.join(dir, "w/x.region-1.png"), "utf8"), "keep");
   assert.equal(results[2]?.diffImage, ".diff/pc/a.png");
   assert.equal(await fileExists(path.join(outDir, ".diff/pc/a.png")), true);
+});
+
+test("tile rejects heights that would not advance", () => {
+  const image = rows(4, 250);
+  for (const tileHeight of [30, 40, 0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => tile(image, { tileHeight }), RangeError, String(tileHeight));
+  }
+  assert.throws(() => tile(image, { tileHeight: 100, overlap: -1 }), RangeError);
+  assert.throws(() => tile(image, { tileHeight: 100, overlap: Number.NaN }), RangeError);
+  assert.equal(tile(image, { tileHeight: 41 }).length, 210);
+  assert.equal(tile(image, { tileHeight: 10, overlap: 0 }).length, 25);
+});
+
+test("CLI rejects invalid --tile, --crop and --threshold values", async (t) => {
+  const dir = await tempDir(t);
+  const outDir = path.join(dir, "out");
+  await mkdir(path.join(outDir, "pc"), { recursive: true });
+  await writePng(path.join(outDir, "pc/x.png"), rows(4, 250));
+  const env = { OUT_DIR: outDir };
+
+  for (const value of ["0", "30", "40", "abc", "1e3", "-100"]) {
+    const result = await flowshot(dir, ["inspect", "x", `--tile=${value}`], env);
+    assert.notEqual(result.code, 0, `--tile ${value}`);
+    assert.match(result.stderr, /--tile expects an integer height greater than 40/, `--tile ${value}`);
+  }
+  for (const value of ["1,2,3", "a,b,c,d", "0,0,0,10", "0,0,10,-1", "0,0,1.5,2", "0,0,1,2,3"]) {
+    const result = await flowshot(dir, ["inspect", "x", `--crop=${value}`], env);
+    assert.notEqual(result.code, 0, `--crop ${value}`);
+    assert.match(result.stderr, /--crop expects x,y,w,h/, `--crop ${value}`);
+  }
+  for (const value of ["abc", "-0.1", "2", "NaN", " "]) {
+    const result = await flowshot(dir, ["diff", `--threshold=${value}`], env);
+    assert.notEqual(result.code, 0, `--threshold ${value}`);
+    assert.match(result.stderr, /--threshold expects a number from 0 to 1/, `--threshold ${value}`);
+  }
+
+  // Valid values behave as before.
+  const tiled = await flowshot(dir, ["inspect", "x", "--tile", "100", "--json"], env);
+  assert.equal(tiled.code, 0, tiled.stderr);
+  assert.deepEqual(JSON.parse(tiled.stdout).pieces.map((piece: { y: number }) => piece.y), [0, 60, 120, 180]);
+  const cropped = await flowshot(dir, ["inspect", "pc/x", "--crop=-2,10,3,500", "--tile", "abc", "--json"], env);
+  assert.equal(cropped.code, 0, cropped.stderr);
+  assert.deepEqual(JSON.parse(cropped.stdout).pieces.map(({ x, y, width, height }: { x: number; y: number; width: number; height: number }) => [x, y, width, height]), [[-2, 10, 3, 240]]);
+  const diffed = await flowshot(dir, ["diff", "--threshold", "0.5"], env);
+  assert.match(diffed.stderr, /no manifest\.json/);
 });

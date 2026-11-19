@@ -70,7 +70,36 @@ function makeLog(quiet: boolean): Logger {
 
 const list = (value: string | undefined): string[] => (value ? value.split(",").map((item) => item.trim()).filter(Boolean) : []);
 
+/** Rows shared by consecutive `inspect` tiles (tile()'s default). */
+const TILE_OVERLAP = 40;
+
 const formatRatio = (ratio: number): string => `${(ratio * 100).toFixed(2)}%`;
+
+/** `--threshold`: a changed-pixel ratio from 0 to 1. */
+function parseThreshold(value: string | undefined): number {
+  if (!value) return 0.0005;
+  const threshold = value.trim() === "" ? Number.NaN : Number(value);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new Error(`--threshold expects a number from 0 to 1 (got ${JSON.stringify(value)})`);
+  return threshold;
+}
+
+/** `--tile`: an integer height greater than the tile overlap. */
+function parseTileHeight(value: string | undefined): number {
+  if (!value) return 1200;
+  const height = /^\s*[0-9]+\s*$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(height) || height <= TILE_OVERLAP) throw new Error(`--tile expects an integer height greater than ${TILE_OVERLAP} (got ${JSON.stringify(value)})`);
+  return height;
+}
+
+/** `--crop x,y,w,h`: integers, with w and h greater than 0. */
+function parseCrop(value: string): [number, number, number, number] {
+  const parts = value.split(",").map((part) => (/^\s*-?[0-9]+\s*$/.test(part) ? Number(part) : Number.NaN));
+  const [x, y, w, h] = parts;
+  if (parts.length !== 4 || x === undefined || y === undefined || w === undefined || h === undefined || !parts.every(Number.isSafeInteger) || w <= 0 || h <= 0) {
+    throw new Error(`--crop expects x,y,w,h as integers with w and h greater than 0 (got ${JSON.stringify(value)})`);
+  }
+  return [x, y, w, h];
+}
 
 async function exists(file: string): Promise<boolean> {
   try {
@@ -216,6 +245,7 @@ function describeDiff(result: DiffResult): string[] {
 }
 
 async function commandDiff(config: Config, values: Values, log: Logger): Promise<void> {
+  const threshold = parseThreshold(values.threshold);
   const manifest = await readManifest(config.outDir);
   if (!manifest) throw new Error(`no ${MANIFEST_FILE} in ${config.outDir}; run \`flowshot run\` first`);
   const baselineDir = values.against ? path.resolve(config.rootDir, values.against) : path.join(config.outDir, PREVIOUS_DIR);
@@ -229,7 +259,6 @@ async function commandDiff(config: Config, values: Values, log: Logger): Promise
     const previous = new Set(await listPngs(baselineDir));
     captures = captures.filter((capture) => previous.has(capture.path));
   }
-  const threshold = values.threshold ? Number(values.threshold) : 0.0005;
   const viewportWidths = Object.fromEntries(config.viewports.map((viewport) => [viewport.name, viewport.width]));
   const results = await diffCaptures({ outDir: config.outDir, baselineDir, captures, threshold, viewportWidths });
   const count = (status: DiffResult["status"]) => results.filter((result) => result.status === status).length;
@@ -277,6 +306,9 @@ async function commandDiff(config: Config, values: Values, log: Logger): Promise
 async function commandInspect(config: Config, values: Values, positionals: string[]): Promise<void> {
   const target = positionals[1];
   if (!target) throw new Error("inspect needs a capture id or path, e.g. `flowshot inspect app/billing/01_overview --viewport mobile`");
+  const cropBox = values.crop ? parseCrop(values.crop) : null;
+  // --tile is ignored with --crop, as before.
+  const tileHeight = parseTileHeight(cropBox ? undefined : values.tile);
   const manifest = await readManifest(config.outDir);
   const viewport = values.viewport ?? config.viewports[0]?.name ?? "pc";
   let relative = target.replace(/^\/+/, "");
@@ -296,16 +328,14 @@ async function commandInspect(config: Config, values: Values, positionals: strin
   const base = relative.replace(/\.png$/, "").replace(/[\\/]/g, "__");
   const pieces: Array<{ file: string; x: number; y: number; width: number; height: number }> = [];
 
-  if (values.crop) {
-    const [x, y, w, h] = values.crop.split(",").map(Number);
-    if (x === undefined || y === undefined || w === undefined || h === undefined || [x, y, w, h].some(Number.isNaN)) throw new Error("--crop expects x,y,w,h");
+  if (cropBox) {
+    const [x, y, w, h] = cropBox;
     const piece = crop(image, x, y, w, h);
     const output = path.join(outDir, `${base}__crop_${x}_${y}_${w}x${h}.png`);
     await writePng(output, piece);
     pieces.push({ file: output, x, y, width: piece.width, height: piece.height });
   } else {
-    const tileHeight = values.tile ? Number(values.tile) : 1200;
-    for (const [index, part] of tile(image, { tileHeight }).entries()) {
+    for (const [index, part] of tile(image, { tileHeight, overlap: TILE_OVERLAP }).entries()) {
       const output = path.join(outDir, `${base}__tile${String(index + 1).padStart(2, "0")}_y${part.y}.png`);
       await writePng(output, part.image);
       pieces.push({ file: output, x: 0, y: part.y, width: part.image.width, height: part.image.height });
