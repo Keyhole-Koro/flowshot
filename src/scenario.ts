@@ -49,13 +49,13 @@ export function defineScenario<State = unknown>(definition: ScenarioDefinition<S
   return normalized;
 }
 
-// Minimal glob: supports `*` (within a segment) and `**` (any depth).
+// Minimal glob: supports `*` (within a segment), `?` (one character) and `**` (any depth).
 function globToRegExp(pattern: string): RegExp {
   const escaped = pattern
     .split("/")
     .map((segment) => {
       if (segment === "**") return "(?:.+/)?";
-      return segment.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*") + "/";
+      return segment.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]") + "/";
     })
     .join("")
     .replace(/\/$/, "");

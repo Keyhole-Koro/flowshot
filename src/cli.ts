@@ -315,8 +315,8 @@ async function commandInspect(config: Config, values: Values, positionals: strin
   if (!relative.endsWith(".png")) relative += ".png";
   // Accept ids (`app/x/01_y`), viewport paths (`mobile/app/x/01_y.png`) and
   // helper trees (`.diff/...`, `.previous/...`).
-  const viewportPrefix = new RegExp(`^(${config.viewports.map((v) => v.name).join("|")})/`);
-  if (!relative.startsWith(".") && !viewportPrefix.test(relative)) relative = `${viewport}/${relative}`;
+  const hasViewportPrefix = config.viewports.some((v) => relative.startsWith(`${v.name}/`));
+  if (!relative.startsWith(".") && !hasViewportPrefix) relative = `${viewport}/${relative}`;
   const file = path.join(config.outDir, relative);
   const entry = manifest?.captures.find((capture) => capture.path === relative) ?? null;
 

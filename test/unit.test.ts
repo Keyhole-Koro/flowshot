@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   buildViewer,
@@ -17,6 +17,7 @@ import {
   edgesFromSteps,
   layoutSteps,
   loadConfig,
+  loadScenarios,
   missingImages,
   readManifest,
   readPng,
@@ -403,4 +404,43 @@ test("buildViewer fills placeholders once: config text containing placeholders s
   assert.match(html, /<script>\s*const DATA = \{/);
   const client = await readFile(path.join(ROOT, "dist/viewer/client.js"), "utf8");
   assert.equal(html.split(client).length, 2);
+});
+
+test("loadScenarios: '?' in a glob matches exactly one character", async (t) => {
+  const dir = await tempDir(t);
+  const index = pathToFileURL(path.join(ROOT, "dist/index.js")).href;
+  const scenario = (id: string) => `import { defineScenario } from ${JSON.stringify(index)};\nexport default defineScenario({ id: ${JSON.stringify(id)}, async capture() {} });\n`;
+  await mkdir(path.join(dir, "flows/deep"), { recursive: true });
+  await writeFile(path.join(dir, "flows/s1.mjs"), scenario("one"));
+  await writeFile(path.join(dir, "flows/s22.mjs"), scenario("twenty-two"));
+  await writeFile(path.join(dir, "flows/deep/s3.mjs"), scenario("three"));
+  const base = await withEnv(NO_ENV, () => loadConfig({ cwd: dir }));
+  const ids = async (...scenarios: string[]) => (await loadScenarios({ ...base, scenarios })).map((entry) => entry.id);
+  assert.deepEqual(await ids("flows/s?.mjs"), ["one"]);
+  assert.deepEqual(await ids("flows/s??.mjs"), ["twenty-two"]);
+  assert.deepEqual(await ids("flows/*.mjs"), ["one", "twenty-two"]);
+  assert.deepEqual(await ids("flows/**/s?.mjs"), ["three", "one"]);
+  await assert.rejects(ids("flows/x?.mjs"), /No scenarios matched/);
+});
+
+test("CLI inspect accepts viewport names with regex characters", async (t) => {
+  const dir = await tempDir(t);
+  await writeFile(path.join(dir, "flowshot.config.mjs"), `export default {
+    outDir: "out",
+    viewports: [{ name: "tab+wide", width: 800, height: 600 }, { name: "a(b", width: 300, height: 600 }],
+  };\n`);
+  await mkdir(path.join(dir, "out/tab+wide"), { recursive: true });
+  await mkdir(path.join(dir, "out/a(b"), { recursive: true });
+  await writePng(path.join(dir, "out/tab+wide/x.png"), rows(4, 50));
+  await writePng(path.join(dir, "out/a(b/x.png"), rows(3, 50));
+  for (const [args, expected] of [
+    [["tab+wide/x"], "tab+wide/x.png"],
+    [["x"], "tab+wide/x.png"],
+    [["a(b/x.png"], "a(b/x.png"],
+    [["x", "--viewport", "a(b"], "a(b/x.png"],
+  ] as const) {
+    const result = await flowshot(dir, ["inspect", ...args, "--json"]);
+    assert.equal(result.code, 0, `${args.join(" ")}: ${result.stderr}`);
+    assert.equal(JSON.parse(result.stdout).path, expected, args.join(" "));
+  }
 });
