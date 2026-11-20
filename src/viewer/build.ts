@@ -196,33 +196,28 @@ export async function buildViewer({ scenarios, config, log }: BuildViewerInput):
     .map((viewport, index) => `<button type="button" data-viewport="${escapeHtml(viewport.name)}" aria-pressed="${index === 0}">${escapeHtml(viewport.label)}</button>`)
     .join("");
 
-  const html = template
-    .replaceAll("{{lang}}", escapeHtml(config.viewer.lang))
-    .replaceAll("{{title}}", escapeHtml(config.viewer.title))
-    .replaceAll("{{subtitle}}", escapeHtml(config.viewer.subtitle))
-    .replaceAll("{{generatedAt}}", escapeHtml(`${labels.generatedAt}: ${new Date(manifest.generatedAt).toLocaleString()}`))
-    .replaceAll("{{viewportButtons}}", viewportButtons)
-    .replaceAll("{{labels.flows}}", escapeHtml(labels.flows))
-    .replaceAll("{{labels.viewportsLabel}}", escapeHtml(labels.viewportsLabel))
-    .replaceAll("{{labels.diagram}}", escapeHtml(labels.diagram))
-    .replaceAll("{{labels.sameFlow}}", escapeHtml(labels.sameFlow))
-    .replaceAll("{{labels.viewMode}}", escapeHtml(labels.viewMode))
-    .replaceAll("{{labels.viewDiagram}}", escapeHtml(labels.viewDiagram))
-    .replaceAll("{{labels.viewGrid}}", escapeHtml(labels.viewGrid))
-    .replaceAll("{{labels.viewCompare}}", escapeHtml(labels.viewCompare))
-    .replaceAll("{{labels.fullFlow}}", escapeHtml(labels.fullFlow))
-    .replaceAll("{{labels.searchPlaceholder}}", escapeHtml(labels.searchPlaceholder))
-    .replaceAll("{{labels.copyLink}}", escapeHtml(labels.copyLink))
-    .replaceAll("{{labels.changedOnly}}", escapeHtml(labels.changedOnly))
-    .replaceAll("{{labels.previousChange}}", escapeHtml(labels.previousChange))
-    .replaceAll("{{labels.nextChange}}", escapeHtml(labels.nextChange))
-    .replaceAll("{{labels.before}}", escapeHtml(labels.before))
-    .replaceAll("{{labels.after}}", escapeHtml(labels.after))
-    .replaceAll("{{labels.difference}}", escapeHtml(labels.difference))
-    .replaceAll("{{labels.openOriginal}}", escapeHtml(labels.openOriginal))
-    .replace("/*{{css}}*/", () => css)
-    .replace("/*{{data}}*/", () => `const DATA = ${JSON.stringify(data).replace(/</g, "\\u003c")};`)
-    .replace("/*{{js}}*/", () => js);
+  // Every placeholder is filled in one pass over the template, so text from
+  // the config (which may itself contain "{{...}}" or "$&") is never
+  // substituted again.
+  const labelKeys = [
+    "flows", "viewportsLabel", "diagram", "sameFlow", "viewMode", "viewDiagram", "viewGrid", "viewCompare", "fullFlow",
+    "searchPlaceholder", "copyLink", "changedOnly", "previousChange", "nextChange", "before", "after", "difference", "openOriginal",
+  ] as const satisfies ReadonlyArray<keyof ViewerLabels>;
+  const values = new Map<string, string>([
+    ["lang", escapeHtml(config.viewer.lang)],
+    ["title", escapeHtml(config.viewer.title)],
+    ["subtitle", escapeHtml(config.viewer.subtitle)],
+    ["generatedAt", escapeHtml(`${labels.generatedAt}: ${new Date(manifest.generatedAt).toLocaleString()}`)],
+    ["viewportButtons", viewportButtons],
+    ...labelKeys.map((key) => [`labels.${key}`, escapeHtml(labels[key])] as const),
+  ]);
+  const blocks = new Map<string, string>([
+    ["css", css],
+    ["data", `const DATA = ${JSON.stringify(data).replace(/</g, "\\u003c")};`],
+    ["js", js],
+  ]);
+  const html = template.replace(/\/\*\{\{(css|data|js)\}\}\*\/|\{\{([A-Za-z.]+)\}\}/g, (match, block: string | undefined, key: string | undefined) =>
+    (block ? blocks.get(block) : values.get(key ?? "")) ?? match);
 
   const output = path.resolve(config.outDir, "index.html");
   await writeFile(output, html, "utf8");

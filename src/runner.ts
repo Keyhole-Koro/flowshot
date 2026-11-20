@@ -7,6 +7,7 @@ import path from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { PREVIOUS_DIR } from "./diff.js";
 import { captureId, pngSize, writeManifest } from "./manifest.js";
+import { resolveInside } from "./paths.js";
 import type { CaptureContext, CaptureEntry, Concurrency, Config, Logger, Manifest, NewContextOptions, Scenario, ShootOptions, Viewport } from "./types.js";
 
 const noopLog: Logger = { info() {}, warn() {}, error() {} };
@@ -46,6 +47,23 @@ function contextOptions(viewport: Viewport, extra: Omit<NewContextOptions, "cook
     hasTouch: Boolean(viewport.hasTouch),
     ...extra,
   };
+}
+
+type CookieInput = NonNullable<NewContextOptions["cookies"]>[number];
+
+/**
+ * Cookies for `context.addCookies()`, scoped to `baseUrl` unless they say
+ * otherwise. Playwright wants either `url` or a `domain`/`path` pair, so a
+ * cookie with its own `url` or `domain` is not given `url: baseUrl`: a
+ * missing `path` becomes "/" and a missing `domain` the host of `baseUrl`.
+ */
+export function cookiesFor<T extends CookieInput>(baseUrl: string, cookies: T[]): T[] {
+  return cookies.map((cookie) => {
+    if (cookie.url) return cookie;
+    if (cookie.domain) return cookie.path ? cookie : { ...cookie, path: "/" };
+    if (cookie.path) return { ...cookie, domain: new URL(baseUrl).hostname };
+    return { url: baseUrl, ...cookie };
+  });
 }
 
 async function keepPrevious(config: Config, file: string, backedUp: Set<string>): Promise<void> {
@@ -106,7 +124,7 @@ function createCaptureContext<State>({ browser, config, scenario, viewport, stat
     async newContext({ cookies, ...options } = {}) {
       const context = track(await browser.newContext(contextOptions(viewport, options)));
       if (cookies?.length) {
-        await context.addCookies(cookies.map((cookie) => ({ url: config.baseUrl, ...cookie })));
+        await context.addCookies(cookiesFor(config.baseUrl, cookies));
       }
       return context;
     },
@@ -122,7 +140,8 @@ function createCaptureContext<State>({ browser, config, scenario, viewport, stat
 
     async shoot(page, relativePath, { fullPage = true, settle: shouldSettle = true, ...options }: ShootOptions = {}) {
       const relative = relativePath.replace(/^\/+/, "");
-      const file = path.join(config.outDir, viewport.name, relative);
+      // Throws before anything is written when the path leaves outDir.
+      const file = resolveInside(config.outDir, path.join(viewport.name, relative));
       await mkdir(path.dirname(file), { recursive: true });
       // Keep the version we are about to overwrite so `flowshot diff` can compare.
       await keepPrevious(config, file, backedUp);
